@@ -1,10 +1,21 @@
 [tool.poetry]
 name = "pro_sports_transactions"
 version = "0.1.0"
-description = "A python wrapper for https://www.prosportstransactions.com/ that allows data to be searched and retrieved."
+description = "A Python Library for Consuming Transactions from Pro Sports Transactions (https://www.prosportstransactions.com)"
 license = "MIT"
 authors = ["Randy Forbes <randy.forbes@gmail.com>"]
 readme = "README.md"
+maintainers = ["Randy Forbes <randy.forbes@gmail.com>"]
+repository = "https://github.com/rsforbes/pro_sports_transactions"
+documentation = "https://github.com/rsforbes/pro_sports_transactions/blob/main/README.md"
+keywords = ["api", "data science", "basketball", "trades", "draft", "transactions", "injuries", "fines", "data", "nba", "mlb", "mls", "nfl", "nhl","sports", "stats"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development"
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
