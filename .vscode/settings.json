@@ -1,0 +1,18 @@
+{
+    "editor.formatOnSave": true,
+    "python.analysis.extraPaths": [
+        "/home/vscode/.cache/pypoetry/virtualenvs/pro-sports-transactions-r87VqQwT-py3.11/lib/python3.11/site-packages",
+        "/workspaces/pro_sports_transactions/src"
+    ],
+    "python.linting.flake8Enabled": true,
+    "python.formatting.provider": "black",
+    "python.formatting.blackArgs": [
+        "--line-length",
+        "100"
+    ],
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportUnboundVariable": "information",
+        "reportImplicitStringConcatenation": "warning",
+        "reportUntypedFunctionDecorator": "information",
+    }
+}

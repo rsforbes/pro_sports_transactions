@@ -1,0 +1,9 @@
+{
+	"name": "nba_data",
+    "image": "mcr.microsoft.com/devcontainers/base:debian",
+	"features": {
+		"ghcr.io/devcontainers/features/python:latest": { "version":"3.11" },
+		"ghcr.io/devcontainers-contrib/features/poetry:2": {}
+	},
+	"remoteEnv": { "PYTHONUTF8": "1" }
+}	
