@@ -1,7 +1,7 @@
 Pro Sports Transactions API
 ===============
 
-An API for Software Engineers, Data Scientists, and sports fans of all to over the world to easily pull transactional data from https://www.prosportstransactions.com/.
+An API for Software Engineers, Data Scientists, and sports fans of all to over the world to easily pull transactional data from https://www.prosportstransactions.com/. Pro Sports includes transactions data about the MLB, NBA
 
 &nbsp;
 # About
@@ -17,7 +17,7 @@ What is sports data without the transactions?
 ```python
 import asyncio
 from datetime import date
-from pro_sports_transactions.search import Search, League, TransactionTypes
+from prosportstransactions.search import Search, League, TransactionTypes
 
 # League (MLB, MLS, NBA, NFL, and NHL)
 league = League.NBA
