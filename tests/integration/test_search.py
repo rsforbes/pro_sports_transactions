@@ -34,15 +34,15 @@ async def test_search_unicode():
 @pytest.mark.asyncio
 async def test_search_readme_md_example():
     from datetime import date
-    from pro_sports_transactions.search import Search, League, TransactionTypes
+    import pro_sports_transactions as pst
 
     # League (MLB, MLS, NBA, NFL, and NHL)
-    league = League.NBA
+    league = pst.League.NBA
 
     # Disciplinary Actions, Injured List, Injuries,
     # Legal Incidents, Minor League To/For, Personal Reasons,
     # and General (e.g., Trades, Acquisitions, Waivers, Draft Picks, etc.)
-    transaction_types = tuple([t for t in TransactionTypes])
+    transaction_types = tuple([t for t in pst.TransactionTypes])
 
     # From the start of the 2022-23 NBA Regular Season
     start_date = date.fromisoformat("2022-10-18")
@@ -58,7 +58,7 @@ async def test_search_readme_md_example():
     starting_row = 0
 
     # How to Search
-    actual = await Search(
+    actual = await pst.Search(
         league=league,
         transaction_types=transaction_types,
         start_date=start_date,
