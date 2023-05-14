@@ -1,6 +1,6 @@
 from datetime import date
 from enum import Enum, StrEnum
-from pandas import read_html, DataFrame
+from pandas import read_html
 from typing import Dict
 from urllib import parse
 import aiohttp
