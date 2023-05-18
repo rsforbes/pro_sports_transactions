@@ -110,12 +110,7 @@ headers = {
 class Parameter:
     @staticmethod
     def date_param(key: str, value: date) -> Dict:
-        iso8601 = ""
-
-        if value is not None and type(value) == date:
-            iso8601 = value.strftime("%Y-%m-%d")
-
-        return {key: iso8601}
+        return {key: value.strftime("%Y-%m-%d") if type(value) == date else ""}
 
     @staticmethod
     def transaction_type(param_name) -> Dict:
