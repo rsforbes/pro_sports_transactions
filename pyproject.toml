@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pro_sports_transactions"
-version = "0.1.1"
+version = "0.2.0"
 description = "A Python Library for Consuming Transactions from Pro Sports Transactions (https://www.prosportstransactions.com)"
 license = "MIT"
 authors = ["Randy Forbes <randy.forbes@gmail.com>"]
