@@ -1,4 +1,4 @@
-from pro_sports_transactions.search import League, TransactionTypes, Parameter
+from pro_sports_transactions.search import League, TransactionType, Parameter
 import pytest
 
 
@@ -9,7 +9,7 @@ def pytest_generate_tests(metafunc):
             [
                 (league, transaction_type)
                 for league in League
-                for transaction_type in TransactionTypes
+                for transaction_type in TransactionType
             ],
         )
 
@@ -24,7 +24,7 @@ def transaction_type(request):
     return request.param
 
 
-def test_transaction_type_param(league: League, transaction_type: TransactionTypes):
+def test_transaction_type_param(league: League, transaction_type: TransactionType):
     actual = Parameter.transaction_type(param_name=transaction_type[league])
-    expected = {TransactionTypes[transaction_type.name][league]: "yes"}
+    expected = {TransactionType[transaction_type.name][league]: "yes"}
     assert expected == actual

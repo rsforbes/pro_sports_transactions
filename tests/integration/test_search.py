@@ -1,11 +1,11 @@
 from datetime import date
-from pro_sports_transactions.search import Search, League, TransactionTypes
+from pro_sports_transactions.search import Search, League, TransactionType
 import pytest
 
 
 @pytest.mark.asyncio
 async def test_search_unicode():
-    transaction_types = tuple([t for t in TransactionTypes])
+    transaction_types = tuple([t for t in TransactionType])
     start_date = date.fromisoformat("2000-01-05")
     end_date = date.fromisoformat("2005-04-05")
 
@@ -42,7 +42,7 @@ async def test_search_readme_md_example():
     # Disciplinary Actions, Injured List, Injuries,
     # Legal Incidents, Minor League To/For, Personal Reasons,
     # and General (e.g., Trades, Acquisitions, Waivers, Draft Picks, etc.)
-    transaction_types = tuple([t for t in pst.TransactionTypes])
+    transaction_types = tuple([t for t in pst.TransactionType])
 
     # From the start of the 2022-23 NBA Regular Season
     start_date = date.fromisoformat("2022-10-18")

@@ -25,7 +25,7 @@ league = pst.League.NBA
 # Disciplinary Actions, Injured List, Injuries,
 # Legal Incidents, Minor League To/For, Personal Reasons,
 # and General (e.g., Trades, Acquisitions, Waivers, Draft Picks, etc.)
-transaction_types = tuple([t for t in pst.TransactionTypes])
+transaction_types = tuple([t for t in pst.TransactionType])
 
 # From the start of the 2022-23 NBA Regular Season
 start_date = date.fromisoformat("2022-10-18")

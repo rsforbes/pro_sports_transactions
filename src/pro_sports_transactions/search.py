@@ -16,14 +16,14 @@ class League(StrEnum):
     MLS = "soccer"
 
 
-class TransactionTypes(Enum):
-    DisciplinaryActions = {"default": "DisciplinaryChkBx"}
+class TransactionType(Enum):
+    Disciplinary = {"default": "DisciplinaryChkBx"}
     InjuredList = {"default": "ILChkBx", "MLB": "DLChkBx"}
-    Injuries = {"default": "InjuriesChkBx"}
-    LegalIncidents = {"default": "LegalChkBx"}
+    Injury = {"default": "InjuriesChkBx"}
+    LegalIncident = {"default": "LegalChkBx"}
     MinorLeagueToFrom = {"default": "NBADLChkBx", "MLB": "MinorsChkBx"}
     General = {"default": "PlayerMovementChkBx"}
-    PersonalReasons = {"default": "PersonalChkBx"}
+    PersonalReason = {"default": "PersonalChkBx"}
 
     def __getitem__(cls, value):
         if type(value) == League:
@@ -37,7 +37,7 @@ class Search:
     def __init__(
         self,
         league: League = League.NBA,
-        transaction_types: TransactionTypes = (),
+        transaction_types: TransactionType = (),
         start_date: date = date.today(),
         end_date: date = date.today(),
         player: str = None,
@@ -110,12 +110,7 @@ headers = {
 class Parameter:
     @staticmethod
     def date_param(key: str, value: date) -> Dict:
-        iso8601 = ""
-
-        if value is not None and type(value) == date:
-            iso8601 = value.strftime("%Y-%m-%d")
-
-        return {key: iso8601}
+        return {key: value.strftime("%Y-%m-%d") if type(value) == date else ""}
 
     @staticmethod
     def transaction_type(param_name) -> Dict:
@@ -167,7 +162,7 @@ class UrlBuilder:
 
         # Add all Transaction Type parameter values
         for transaction_type in transaction_types:
-            params |= Parameter.transaction_type(TransactionTypes[transaction_type.name][league])
+            params |= Parameter.transaction_type(TransactionType[transaction_type.name][league])
 
         return f"{netloc}/{league.value}/{path}?{parse.urlencode(params)}"
 
