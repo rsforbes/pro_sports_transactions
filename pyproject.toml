@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pro_sports_transactions"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Python Library for Consuming Transactions from Pro Sports Transactions (https://www.prosportstransactions.com)"
 license = "MIT"
 authors = ["Randy Forbes <randy.forbes@gmail.com>"]
@@ -31,6 +31,7 @@ black = "^23.3.0"
 flake8 = "^6.0.0"
 pytest = "^7.3.1"
 pytest-asyncio = "^0.21.0"
+pytest-mock = "^3.10.0"
 
 [build-system]
 requires = ["poetry-core"]

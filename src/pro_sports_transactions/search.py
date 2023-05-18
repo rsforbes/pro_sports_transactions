@@ -1,6 +1,6 @@
 from datetime import date
 from enum import Enum, StrEnum
-from pandas import read_html
+from pandas import DataFrame, read_html
 from typing import Dict
 from urllib import parse
 import aiohttp
@@ -54,23 +54,32 @@ class Search:
             starting_row=starting_row,
         )
 
-    async def _search(self) -> list:
+    async def _get_dataframe(self) -> DataFrame:
+        # Generic DataFrame to hold results
         response = await Http.get(self._url)
-        return read_html(response, header=0, keep_default_na=False)
 
-    async def get_dataframe(self):
-        data = await self._search()
-        df = pd.DataFrame(data[0], columns=["Date", "Team", "Acquired", "Relinquished", "Notes"])
-        df.attrs["pages"] = data[1].columns[2].split(" ")[-1]
+        df = None
+        try:
+            df_list = read_html(response, header=0, keep_default_na=False)
+            df = pd.DataFrame(
+                df_list[0], columns=["Date", "Team", "Acquired", "Relinquished", "Notes"]
+            )
+            df.attrs["pages"] = int(df_list[1].columns[2].split(" ")[-1])
+        except Exception as e:
+            df = pd.DataFrame(columns=["Date", "Team", "Acquired", "Relinquished", "Notes"])
+            df.attrs["pages"] = 0
+            df.attrs["errors"] = (repr(e),)
+
         return df
 
     async def get_dict(self):
-        results = await self._search()
+        df = await self._get_dataframe()
 
         data = {}
-        data["transactions"] = results[0].to_dict(orient="records")
-        data["pages"] = int(results[1].columns[2].split(" ")[-1])
-
+        data["transactions"] = df.to_dict(orient="records")
+        data["pages"] = df.attrs["pages"]
+        if "errors" in df.attrs:
+            data["errors"] = df.attrs["errors"]
         return data
 
     async def get_json(self):
