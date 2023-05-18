@@ -1,3 +1,3 @@
-from .search import League, Search, TransactionTypes
+from .search import League, Search, TransactionType
 
-__all__ = ["League", "Search", "TransactionTypes"]
+__all__ = ["League", "Search", "TransactionType"]

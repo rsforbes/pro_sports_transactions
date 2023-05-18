@@ -1,5 +1,5 @@
 from datetime import date
-from pro_sports_transactions.search import League, TransactionTypes, UrlBuilder
+from pro_sports_transactions.search import League, TransactionType, UrlBuilder
 from urllib import parse
 import pytest
 
@@ -18,7 +18,7 @@ def league(request):
 
 
 def test_build_url(league: League):
-    transaction_types = tuple([t for t in TransactionTypes])
+    transaction_types = tuple([t for t in TransactionType])
     start_date = date.fromisoformat("2000-01-05")
     end_date = date.fromisoformat("2006-04-05")
 
@@ -35,8 +35,8 @@ def test_build_url(league: League):
     )
 
     transaction_type_param = ""
-    for transaction_type in TransactionTypes:
-        transaction_type_param += f"{TransactionTypes[transaction_type.name][league]}=yes&"
+    for transaction_type in TransactionType:
+        transaction_type_param += f"{TransactionType[transaction_type.name][league]}=yes&"
 
     expected = parse.urlparse(
         f"https://www.prosportstransactions.com/{league.value}/Search"

@@ -1,4 +1,4 @@
-from pro_sports_transactions.search import TransactionTypes, Http as pst_http
+from pro_sports_transactions.search import TransactionType, Http as pst_http
 import pro_sports_transactions as pst
 import pytest
 
@@ -71,7 +71,7 @@ async def test_valid_response(mock_valid_reponse):
         )
     )
 
-    transaction_types = tuple([t for t in TransactionTypes])
+    transaction_types = tuple([t for t in TransactionType])
 
     actual = await pst.Search(
         league=pst.League.NBA,
@@ -83,7 +83,7 @@ async def test_valid_response(mock_valid_reponse):
 
 @pytest.mark.asyncio
 async def test_empty_response(mock_empty_reponse):
-    transaction_types = tuple([t for t in TransactionTypes])
+    transaction_types = tuple([t for t in TransactionType])
 
     actual = await pst.Search(
         league=pst.League.NBA,
