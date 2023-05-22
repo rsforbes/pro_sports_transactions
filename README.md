@@ -1,7 +1,7 @@
 Pro Sports Transactions API
 ===============
 
-An API for Software Engineers, Data Scientists, and sports fans of all to over the world to easily pull transactional data from https://www.prosportstransactions.com/.
+Pro Sports Transactions is a Python API client-library for https://www.prosportstransactions.com enabling software engineers, data scientists, and sports fans with the ability to easily retrieve trades, free agent movements, signings, injuries, disciplinary actions, legal/criminal actions, and much more for five of the North American professional leagues: MLB, MLS, NBA, NFL, and NHL.
 
 &nbsp;
 # About
@@ -24,7 +24,7 @@ league = pst.League.NBA
 
 # Disciplinary Actions, Injured List, Injuries,
 # Legal Incidents, Minor League To/For, Personal Reasons,
-# and General (e.g., Trades, Acquisitions, Waivers, Draft Picks, etc.)
+# and Movement (e.g., Trades, Acquisitions, Waivers, Draft Picks, etc.)
 transaction_types = tuple([t for t in pst.TransactionType])
 
 # From the start of the 2022-23 NBA Regular Season

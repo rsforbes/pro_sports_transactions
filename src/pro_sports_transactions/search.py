@@ -22,7 +22,7 @@ class TransactionType(Enum):
     Injury = {"default": "InjuriesChkBx"}
     LegalIncident = {"default": "LegalChkBx"}
     MinorLeagueToFrom = {"default": "NBADLChkBx", "MLB": "MinorsChkBx"}
-    General = {"default": "PlayerMovementChkBx"}
+    Movement = {"default": "PlayerMovementChkBx"}
     PersonalReason = {"default": "PersonalChkBx"}
 
     def __getitem__(cls, value):
@@ -62,11 +62,14 @@ class Search:
         try:
             df_list = read_html(response, header=0, keep_default_na=False)
             df = pd.DataFrame(
-                df_list[0], columns=["Date", "Team", "Acquired", "Relinquished", "Notes"]
+                df_list[0],
+                columns=["Date", "Team", "Acquired", "Relinquished", "Notes"],
             )
             df.attrs["pages"] = int(df_list[1].columns[2].split(" ")[-1])
         except Exception as e:
-            df = pd.DataFrame(columns=["Date", "Team", "Acquired", "Relinquished", "Notes"])
+            df = pd.DataFrame(
+                columns=["Date", "Team", "Acquired", "Relinquished", "Notes"]
+            )
             df.attrs["pages"] = 0
             df.attrs["errors"] = (repr(e),)
 
@@ -162,7 +165,9 @@ class UrlBuilder:
 
         # Add all Transaction Type parameter values
         for transaction_type in transaction_types:
-            params |= Parameter.transaction_type(TransactionType[transaction_type.name][league])
+            params |= Parameter.transaction_type(
+                TransactionType[transaction_type.name][league]
+            )
 
         return f"{netloc}/{league.value}/{path}?{parse.urlencode(params)}"
 
@@ -172,4 +177,8 @@ class Http:
     async def get(url):
         async with aiohttp.ClientSession(headers=headers) as session:
             async with session.get(url) as response:
-                return None if response.status != 200 else await response.text(encoding="utf-8")
+                return (
+                    None
+                    if response.status != 200
+                    else await response.text(encoding="utf-8")
+                )
