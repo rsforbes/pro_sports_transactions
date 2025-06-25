@@ -1,9 +1,48 @@
 {
-	"name": "nba_data",
-    "image": "mcr.microsoft.com/devcontainers/base:debian",
-	"features": {
-		"ghcr.io/devcontainers/features/python:latest": { "version":"3.11" },
-		"ghcr.io/devcontainers-contrib/features/poetry:2": {}
+	"name": "ProSportsTransactions",
+    // Build configuration for the container
+    
+	"build": {
+        // Path to the Dockerfile relative to the build context
+        "dockerfile": "Dockerfile",
+        // Build context directory - ".." means parent directory of .devcontainer folder
+        // This allows Docker to access project files outside the .devcontainer directory
+        "context": ".."
+    },
+
+	// VS Code specific customizations
+	"customizations": {
+		"vscode": {
+			// Extensions to install automatically in the container
+			"extensions": [
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-python.black-formatter",
+				"ms-python.flake8"
+			],
+		
+            // VS Code settings to apply in the container
+            "settings": {
+                
+                // Automatically format files when saving
+                "editor.formatOnSave": true,
+                
+                // Use Black as the Python code formatter
+                "python.formatting.provider": "black",
+                
+                // Set bash as the default terminal shell in Linux
+                "terminal.integrated.defaultProfile.linux": "bash"
+            }
+		}
 	},
-	"remoteEnv": { "PYTHONUTF8": "1" }
+	// Ports to forward from container to host (empty array = no ports forwarded)
+	"forwardPorts": [],
+
+	// User to connect as when attaching to the container
+	// "vscode" user typically has sudo privileges and proper permissions
+	"remoteUser": "vscode",
+	
+	// Command to run after the container is created and VS Code connects
+	// This script likely sets up the development environment
+	"postCreateCommand": "bash .devcontainer/post_create_command.sh"
 }	
