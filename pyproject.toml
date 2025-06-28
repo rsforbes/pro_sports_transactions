@@ -32,6 +32,9 @@ flake8 = "^6.0.0"
 pytest = "^7.3.1"
 pytest-asyncio = "^0.21.0"
 pytest-mock = "^3.10.0"
+pytest-cov = "^4.1.0"
+radon = "^6.0.1"
+flake8-cognitive-complexity = "^0.1.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -41,3 +44,53 @@ build-backend = "poetry.core.masonry.api"
 pythonpath = [
   "src"
 ]
+
+[tool.coverage.run]
+# Enable branch coverage to ensure all conditional paths are tested
+# This catches untested else branches and exception handlers
+branch = true
+
+# Only measure coverage for our source code, not dependencies
+source = ["src/pro_sports_transactions"]
+
+# Files to exclude from coverage measurement:
+omit = [
+    "*/tests/*",      # Test files themselves don't need coverage
+    "*/test_*",       # Any test files regardless of location
+    "*/__init__.py",  # Init files are usually empty or just imports
+    "*/setup.py",     # Build configuration doesn't need testing
+    "*/conftest.py"   # Pytest configuration file
+]
+
+[tool.coverage.report]
+# Lines to exclude from coverage reporting:
+exclude_lines = [
+    "pragma: no cover",           # Explicit coverage exclusion marker
+    "def __repr__",              # String representation methods are for debugging
+    "if self.debug:",            # Debug-only code paths
+    "raise AssertionError",      # Defensive programming assertions
+    "raise NotImplementedError", # Abstract method stubs
+    "if 0:",                     # Unreachable code blocks
+    "if __name__ == .__main__.:", # Script entry points
+    "@(abc.)?abstractmethod"     # Abstract method declarations
+]
+
+# Show 2 decimal places in coverage percentages for precision
+precision = 2
+
+# Show all files, even those with 100% coverage (helps verify what's tested)
+skip_covered = false
+
+# Show line numbers of missing coverage in the report
+show_missing = true
+
+# Fail if coverage drops below 80% - this maintains our minimum standard
+fail_under = 80
+
+[tool.coverage.html]
+# Directory for HTML coverage reports - useful for detailed analysis
+directory = "htmlcov"
+
+[tool.coverage.xml]
+# XML output for CI/CD integration and coverage badges
+output = "coverage.xml"

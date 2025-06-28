@@ -18,7 +18,8 @@
 				"ms-python.python",
 				"ms-python.vscode-pylance",
 				"ms-python.black-formatter",
-				"ms-python.flake8"
+				"ms-python.flake8",
+				"ms-vscode.makefile-tools"
 			],
 		
             // VS Code settings to apply in the container

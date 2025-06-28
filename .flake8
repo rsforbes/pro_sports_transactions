@@ -1,4 +1,31 @@
 [flake8]
+# Black formatter uses 88 characters by default, so we match it for consistency
+# This prevents conflicts between black formatting and flake8 checks
 max-line-length = 88
+
+# McCabe complexity threshold of 10 is industry standard for maintainable code
+# Functions with complexity > 10 are difficult to understand and test
+# See: https://en.wikipedia.org/wiki/Cyclomatic_complexity
+max-complexity = 10
+
+# Select specific error codes to check:
+# C = McCabe complexity
+# E = PEP8 errors
+# F = PyFlakes errors (undefined names, imports, etc.)
+# W = PEP8 warnings
+# B = flake8-bugbear plugin (catches common bugs)
+# B950 = line too long warning from bugbear (more flexible than E501)
 select = C,E,F,W,B,B950
+
+# Ignore specific errors:
+# E203 = whitespace before ':' - conflicts with black's formatting choices
+# E501 = line too long - we use B950 instead which allows some flexibility
 extend-ignore = E203, E501
+
+# Per-file rule exceptions:
+per-file-ignores =
+    # Test files often require more complex setup/teardown and multiple test cases
+    # which naturally increases cyclomatic complexity. C901 = complexity check
+    # Allowing higher complexity in tests doesn't impact production code quality
+    test_*.py:C901
+    */tests/*.py:C901
