@@ -26,6 +26,7 @@ lxml = "^4.9.2"
 html5lib = "^1.1"
 bs4 = "^0.0.1"
 cloudscraper = {git = "https://github.com/VeNoMouS/cloudscraper.git", rev = "refs/pull/295/head"}
+curl_cffi = "^0.11.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.3.0"
