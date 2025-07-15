@@ -3,7 +3,6 @@ from enum import Enum, StrEnum
 from pandas import DataFrame, read_html
 from typing import Dict
 from urllib import parse
-import aiohttp
 import json
 import pandas as pd
 
@@ -60,6 +59,9 @@ class Search:
 
         df = None
         try:
+            if response is None:
+                raise Exception("No response received")
+
             df_list = read_html(response, header=0, keep_default_na=False)
             df = pd.DataFrame(
                 df_list[0],
@@ -175,10 +177,12 @@ class UrlBuilder:
 class Http:
     @staticmethod
     async def get(url):
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(url) as response:
-                return (
-                    None
-                    if response.status != 200
-                    else await response.text(encoding="utf-8")
-                )
+        """Get page content using Playwright with JA4 bypass."""
+        try:
+            from .simple_playwright import SimplePlaywrightClient
+
+            client = SimplePlaywrightClient()
+            return await client.get_page_content(url)
+        except Exception:
+            # Return None if Playwright fails, let _get_dataframe handle it
+            return None

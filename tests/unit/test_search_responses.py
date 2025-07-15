@@ -1,4 +1,4 @@
-from pro_sports_transactions.search import TransactionType, Http as pst_http
+from pro_sports_transactions.search import TransactionType
 import pro_sports_transactions as pst
 import pytest
 
@@ -47,7 +47,8 @@ def mock_empty_reponse(create_mock_coro):
     response = None
     # read https://www.prosportstransactions.com/ search results
     with open(
-        r"/workspaces/pro_sports_transactions/tests/unit/data/empty_response.html", mode="r"
+        r"/workspaces/pro_sports_transactions/tests/unit/data/empty_response.html",
+        mode="r",
     ) as f:
         response = f.read()
 

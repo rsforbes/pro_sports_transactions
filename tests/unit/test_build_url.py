@@ -36,7 +36,9 @@ def test_build_url(league: League):
 
     transaction_type_param = ""
     for transaction_type in TransactionType:
-        transaction_type_param += f"{TransactionType[transaction_type.name][league]}=yes&"
+        transaction_type_param += (
+            f"{TransactionType[transaction_type.name][league]}=yes&"
+        )
 
     expected = parse.urlparse(
         f"https://www.prosportstransactions.com/{league.value}/Search"

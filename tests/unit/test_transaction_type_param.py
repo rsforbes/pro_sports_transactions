@@ -3,7 +3,10 @@ import pytest
 
 
 def pytest_generate_tests(metafunc):
-    if "league" in metafunc.fixturenames and "transaction_type" in metafunc.fixturenames:
+    if (
+        "league" in metafunc.fixturenames and
+        "transaction_type" in metafunc.fixturenames
+    ):
         metafunc.parametrize(
             ("league", "transaction_type"),
             [
