@@ -22,7 +22,8 @@
                 "ms-python.black-formatter",
                 "ms-python.flake8",
                 "ms-python.pylint",
-                "tamasfe.even-better-toml"
+                "tamasfe.even-better-toml",
+                "ms-python.isort"
             ],
             
             // VS Code settings to apply in the container
@@ -52,8 +53,11 @@
     },
     
     // Ports to forward from container to host (empty array = no ports forwarded)
-    // Add port numbers here if your application serves web content (e.g., [8000, 3000])
+    // Not needed when using --network=host as all ports are accessible
     "forwardPorts": [],
+    
+    // Use host networking to access services (e.g. unflare) running on host
+    "runArgs": ["--network=host"],
     
     // User to connect as when attaching to the container
     // "vscode" user has proper permissions and development tools pre-configured
