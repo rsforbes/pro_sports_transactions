@@ -5,6 +5,9 @@
         "/workspaces/pro_sports_transactions/src"
     ],
     "python.linting.flake8Enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.linting.pylintPath": ".venv/bin/pylint",
+    "python.defaultInterpreterPath": ".venv/bin/python",
     "python.formatting.provider": "black",
     "python.formatting.blackArgs": [
         "--line-length",

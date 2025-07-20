@@ -1,4 +1,11 @@
 [flake8]
-max-line-length = 88
+exclude = .venv
+max-line-length = 
+    # black default
+    88 
 select = C,E,F,W,B,B950
-extend-ignore = E203, E501
+extend-ignore = 
+    # E203 whitespace before ':'
+    E203, 
+    # W504 line break after binary operator (managed via black)
+    W504  

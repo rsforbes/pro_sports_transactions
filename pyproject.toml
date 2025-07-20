@@ -32,12 +32,42 @@ flake8 = "^6.0.0"
 pytest = "^7.3.1"
 pytest-asyncio = "^0.21.0"
 pytest-mock = "^3.10.0"
+isort = "^6.0.1"
+pylint = "^3.3.7"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
+testpaths = [
+  "tests/unit"
+]
 pythonpath = [
   "src"
+]
+
+# Markers for different test types
+addopts = "--strict-markers"
+markers = [
+  "unit: Unit tests (default)",
+  "integration: Integration tests requiring external services",
+  "performance: Performance benchmark tests",
+  "slow: Tests that take significant time to run"
+]
+
+# Performance test thresholds
+[tool.performance-thresholds]
+# Configure performance test thresholds here
+unflare_cache_hit_speedup = 10.0  # Cache hits should be 10x faster than misses
+direct_request_timeout = 5.0       # Direct requests should timeout within 5s
+unflare_first_request_max = 30.0  # First Unflare request max time in seconds
+
+[tool.pylint.master]
+# Exclude directories
+ignore-paths = [
+    "^.venv/.*$",
+    "^venv/.*$",
+    "^__pycache__/.*$",
+    "^.git/.*$"
 ]
