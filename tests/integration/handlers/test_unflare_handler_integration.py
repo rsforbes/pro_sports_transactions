@@ -16,7 +16,7 @@ async def is_unflare_service_available(service_url: str) -> bool:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 service_url,
-                json={"url": "https://example.com", "timeout": 1000},
+                json={"url": "https://example.com", "timeout": 5000},
                 headers={"Content-Type": "application/json"},
                 timeout=aiohttp.ClientTimeout(total=2),
             ):
