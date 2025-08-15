@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pro_sports_transactions"
-version = "1.1.0"
+version = "1.1.1"
 description = "A Python Library for Consuming Transactions from Pro Sports Transactions (https://www.prosportstransactions.com)"
 license = "MIT"
 authors = ["Randy Forbes <randy.forbes@gmail.com>"]
@@ -19,7 +19,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-aiohttp = "^3.8.4"
+aiohttp = "^3.12.14"
 pandas = "^2.0.0"
 brotli = "^1.0.9"
 lxml = "^4.9.2"
