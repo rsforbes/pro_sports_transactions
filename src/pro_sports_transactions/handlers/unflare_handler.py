@@ -1,4 +1,6 @@
 """Unflare proxy request handler for bypassing Cloudflare protection."""
+
+import logging
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -6,6 +8,8 @@ from typing import Dict, Optional
 import aiohttp
 
 from .base_handler import RequestConfig, RequestHandler
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -43,9 +47,9 @@ class UnflareRequestHandler(RequestHandler):
             True if cache is valid and not expired, False otherwise
         """
         return (
-            self._cached_cookies is not None and
-            self._cached_headers is not None and
-            time.time() < self._cache_expiry
+            self._cached_cookies is not None
+            and self._cached_headers is not None
+            and time.time() < self._cache_expiry
         )
 
     async def _try_cached_request(
@@ -53,50 +57,66 @@ class UnflareRequestHandler(RequestHandler):
     ) -> Optional[str]:
         """Try to make request using cached cookies"""
         try:
-            print("Using cached cookies (fast path)")
+            logger.info("Requesting with cached credentials")
             final_headers = {**headers, **self._cached_headers}
+            final_headers["Accept-Encoding"] = "gzip, deflate, br"
             if self._cached_cookies:
                 final_headers["Cookie"] = self._cached_cookies
 
-            async with aiohttp.ClientSession(headers=final_headers) as session:
+            timeout = aiohttp.ClientTimeout(total=120)
+            async with aiohttp.ClientSession(
+                headers=final_headers, timeout=timeout
+            ) as session:
                 async with session.get(url) as response:
                     if response.status == 200:
                         return await response.text(encoding="utf-8")
                     if response.status == 403:
                         # Cloudflare challenge - cookies expired
-                        print("Cached cookies expired, refreshing...")
+                        logger.warning("Cached cookies expired, refreshing...")
                         self.clear_cache()
                         return None
+                    logger.warning(
+                        "Cached request failed with status %d: %s",
+                        response.status,
+                        await response.text(),
+                    )
                     return None
         except (aiohttp.ClientError, OSError) as e:
-            print(f"Cached request failed: {e}")
+            logger.error("Cached request failed: %s", e)
             return None
 
     async def _refresh_cache_and_request(
         self, url: str, headers: Dict[str, str]
     ) -> Optional[str]:
         """Get fresh cookies from Unflare and cache them"""
-        print("Requesting fresh cookies from Unflare (slow path)")
+        logger.info("Requesting fresh credentials from Unflare")
         request_data = {"url": url, "timeout": self.config.timeout, "method": "GET"}
 
         if self.config.proxy:
             request_data["proxy"] = self.config.proxy
 
+        timeout = aiohttp.ClientTimeout(total=120)
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     self.config.url,
                     json=request_data,
                     headers={"Content-Type": "application/json"},
                 ) as response:
                     if response.status != 200:
+                        logger.warning(
+                            "Unflare service returned status %d: %s",
+                            response.status,
+                            await response.text(),
+                        )
                         return None
 
                     result = await response.json()
 
                     if "code" in result and result["code"] == "error":
-                        print(
-                            f"Unflare error: {result.get('message', 'Unknown error')}"
+                        logger.error(
+                            "Unflare error: %s",
+                            result.get("message", "Unknown error"),
                         )
                         return None
 
@@ -108,21 +128,25 @@ class UnflareRequestHandler(RequestHandler):
 
                     # Build final headers
                     final_headers = {**headers, **unflare_headers}
+                    final_headers["Accept-Encoding"] = "gzip, deflate, br"
                     if self._cached_cookies:
                         final_headers["Cookie"] = self._cached_cookies
 
                     # Make the actual request
                     async with aiohttp.ClientSession(
-                        headers=final_headers
+                        headers=final_headers, timeout=timeout
                     ) as final_session:
                         async with final_session.get(url) as final_response:
-                            return (
-                                None
-                                if final_response.status != 200
-                                else await final_response.text(encoding="utf-8")
-                            )
+                            if final_response.status != 200:
+                                logger.warning(
+                                    "Final request failed with status %d: %s",
+                                    final_response.status,
+                                    await final_response.text(),
+                                )
+                                return None
+                            return await final_response.text(encoding="utf-8")
         except (aiohttp.ClientError, OSError) as e:
-            print(f"Unflare request failed: {e}")
+            logger.error("Unflare request failed: %s", e)
             return None
 
     def cache_credentials(self, cookies: list, unflare_headers: dict):

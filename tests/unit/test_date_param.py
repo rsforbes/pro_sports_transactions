@@ -1,4 +1,5 @@
 """Unit tests for date parameter handling."""
+
 from datetime import date
 
 import pytest

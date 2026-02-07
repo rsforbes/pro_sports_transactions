@@ -1,4 +1,5 @@
 """Integration tests for DirectRequestHandler."""
+
 import pytest
 
 from pro_sports_transactions.handlers import DirectRequestHandler

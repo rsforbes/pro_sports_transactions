@@ -1,4 +1,5 @@
 """Base classes for HTTP request handling."""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Optional

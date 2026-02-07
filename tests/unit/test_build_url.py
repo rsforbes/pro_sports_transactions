@@ -1,4 +1,5 @@
 """Unit tests for URL building functionality."""
+
 from datetime import date
 from urllib import parse
 

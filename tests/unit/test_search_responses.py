@@ -1,4 +1,5 @@
 """Unit tests for search response handling."""
+
 import pytest
 
 import pro_sports_transactions as pst
