@@ -8,18 +8,43 @@ readme = "README.md"
 maintainers = ["Randy Forbes <randy.forbes@gmail.com>"]
 repository = "https://github.com/rsforbes/pro_sports_transactions"
 documentation = "https://github.com/rsforbes/pro_sports_transactions/blob/main/README.md"
-keywords = ["api", "basketball", "baseball", "data", "data science", "draft", "fines", "football", "hockey", "injuries", "mlb", "mls", "nba", "nfl", "nhl", "prosports", "prosportstransactions", "pro sports", "pro sports transactions", "soccer","sports", "stats", "trades", "transactions"]
+keywords = [
+  "api",
+  "basketball",
+  "baseball",
+  "data",
+  "data science",
+  "draft",
+  "fines",
+  "football",
+  "hockey",
+  "injuries",
+  "mlb",
+  "mls",
+  "nba",
+  "nfl",
+  "nhl",
+  "prosports",
+  "prosportstransactions",
+  "pro sports",
+  "pro sports transactions",
+  "soccer",
+  "sports",
+  "stats",
+  "trades",
+  "transactions",
+]
 classifiers = [
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-    "Topic :: Software Development"
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development",
 ]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-aiohttp = "^3.12.14"
+aiohttp = "^3.13.3"
 pandas = "^2.0.0"
 brotli = "^1.0.9"
 lxml = "^4.9.2"
@@ -40,12 +65,8 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-testpaths = [
-  "tests/unit"
-]
-pythonpath = [
-  "src"
-]
+testpaths = ["tests/unit"]
+pythonpath = ["src"]
 
 # Markers for different test types
 addopts = "--strict-markers"
@@ -53,21 +74,16 @@ markers = [
   "unit: Unit tests (default)",
   "integration: Integration tests requiring external services",
   "performance: Performance benchmark tests",
-  "slow: Tests that take significant time to run"
+  "slow: Tests that take significant time to run",
 ]
 
 # Performance test thresholds
 [tool.performance-thresholds]
 # Configure performance test thresholds here
-unflare_cache_hit_speedup = 10.0  # Cache hits should be 10x faster than misses
-direct_request_timeout = 5.0       # Direct requests should timeout within 5s
-unflare_first_request_max = 30.0  # First Unflare request max time in seconds
+unflare_cache_hit_speedup = 10.0 # Cache hits should be 10x faster than misses
+direct_request_timeout = 5.0     # Direct requests should timeout within 5s
+unflare_first_request_max = 30.0 # First Unflare request max time in seconds
 
 [tool.pylint.master]
 # Exclude directories
-ignore-paths = [
-    "^.venv/.*$",
-    "^venv/.*$",
-    "^__pycache__/.*$",
-    "^.git/.*$"
-]
+ignore-paths = ["^.venv/.*$", "^venv/.*$", "^__pycache__/.*$", "^.git/.*$"]
