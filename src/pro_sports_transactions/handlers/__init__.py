@@ -7,12 +7,16 @@ other network challenges.
 """
 
 from .base_handler import RequestConfig, RequestHandler
+from .cloudscraper_handler import (CloudscraperConfig,
+                                   CloudscraperRequestHandler)
 from .direct_handler import DirectRequestHandler
 from .unflare_handler import UnflareConfig, UnflareRequestHandler
 
 __all__ = [
     "RequestHandler",
     "RequestConfig",
+    "CloudscraperRequestHandler",
+    "CloudscraperConfig",
     "DirectRequestHandler",
     "UnflareRequestHandler",
     "UnflareConfig",

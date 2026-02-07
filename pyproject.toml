@@ -50,6 +50,7 @@ brotli = "^1.2.0"
 lxml = "^4.9.2"
 html5lib = "^1.1"
 bs4 = "^0.0.1"
+cloudscraper = "^1.2.71"
 
 [tool.poetry.group.dev.dependencies]
 black = ">=23.3,<25.0"
