@@ -1,4 +1,5 @@
 """Direct HTTP request handler implementation."""
+
 from typing import Dict, Optional
 
 import aiohttp

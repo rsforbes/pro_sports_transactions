@@ -1,4 +1,5 @@
 """Integration tests for UnflareRequestHandler."""
+
 import asyncio
 
 import aiohttp
@@ -14,9 +15,9 @@ async def is_unflare_service_available(service_url: str) -> bool:
     try:
         # Try to connect to the service with a minimal request
         async with aiohttp.ClientSession() as session:
-            async with session.post(
+            async with session.get(
                 service_url,
-                json={"url": "https://example.com", "timeout": 5000},
+                json={"url": "https://www.prosportstransactions.com", "timeout": 5000},
                 headers={"Content-Type": "application/json"},
                 timeout=aiohttp.ClientTimeout(total=2),
             ):
@@ -91,7 +92,7 @@ class TestUnflareHandlerIntegration:
         Test UnflareRequestHandler with Docker-hosted Unflare service.
         Skips if Docker service is not available.
         """
-        config = UnflareConfig(url="http://host.docker.internal:5002/scrape")
+        config = UnflareConfig(url="http://localhost:5002/scrape")
 
         # Check if Docker-hosted service is available
         service_available = await is_unflare_service_available(config.url)

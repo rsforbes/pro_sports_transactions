@@ -3,6 +3,7 @@
 This module provides classes and utilities for searching and retrieving
 professional sports transaction data from prosportstransactions.com.
 """
+
 import json
 import warnings
 from datetime import date
@@ -135,9 +136,9 @@ headers = {
     "content-type": "text/html; charset=utf-8 ",
     "referer": "https://www.prosportstransactions.com/",
     "user-agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-        "AppleWebKit/537.36 (KHTML, like Gecko) " +
-        "Chrome/112.0.0.0 Safari/537.36 Edg/112.0.1722.48"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        + "AppleWebKit/537.36 (KHTML, like Gecko) "
+        + "Chrome/112.0.0.0 Safari/537.36 Edg/112.0.1722.48"
     ),
 }
 
@@ -228,8 +229,8 @@ class Http:  # pylint: disable=too-few-public-methods
     async def get(url):
         """Get data from URL (deprecated - use Search class instead)."""
         warnings.warn(
-            "Http.get() will be deprecated in a future release. " +
-            "Use the Search class methods instead.",
+            "Http.get() will be deprecated in a future release. "
+            + "Use the Search class methods instead.",
             DeprecationWarning,
             stacklevel=2,
         )

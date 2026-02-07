@@ -1,4 +1,5 @@
 """Unit tests for transaction type parameter handling."""
+
 import pytest
 
 from pro_sports_transactions.search import League, Parameter, TransactionType
@@ -7,8 +8,8 @@ from pro_sports_transactions.search import League, Parameter, TransactionType
 def pytest_generate_tests(metafunc):
     """Generate test parameters for league and transaction type combinations."""
     if (
-        "league_param" in metafunc.fixturenames and
-        "transaction_type_param" in metafunc.fixturenames
+        "league_param" in metafunc.fixturenames
+        and "transaction_type_param" in metafunc.fixturenames
     ):
         metafunc.parametrize(
             ("league_param", "transaction_type_param"),

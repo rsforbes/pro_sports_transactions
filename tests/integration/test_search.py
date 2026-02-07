@@ -1,4 +1,5 @@
 """Integration tests for search functionality."""
+
 # pylint: disable=duplicate-code  # Test files naturally have similar test data
 from datetime import date
 
