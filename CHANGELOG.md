@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-02-07
+
+### Fixed
+- Resolved "Can not decode content-encoding: br" Brotli decoding error in `UnflareRequestHandler` by adding `Accept-Encoding: gzip, deflate, br` header to all outbound requests ([#11](https://github.com/rsforbes/pro_sports_transactions/issues/11))
+- Added `aiohttp.ClientTimeout` (120s) to all HTTP sessions to prevent requests from hanging indefinitely
+- Non-200 HTTP responses are now logged with status code and response body instead of failing silently
+
+### Changed
+- Replaced all `print()` statements in `UnflareRequestHandler` with Python `logging` module
+- Added `NullHandler` to package logger so consumers control log output
+- Fixed integration test service availability check (use correct HTTP method and target URL)
+
+### Added
+- Example script (`examples/unflare_search.py`) demonstrating Unflare handler usage
+
+### Security
+- Bumped brotli from ^1.0.9 to ^1.2.0
+
 ## [1.1.1] - 2025-08-15
 
 ### Fixed
@@ -70,5 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Transaction type filtering
 - Cache support for improved performance
 
-[1.1.0]: https://github.com/mskarlin/pro_sports_transactions/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/mskarlin/pro_sports_transactions/releases/tag/v1.0.0
+[1.1.2]: https://github.com/rsforbes/pro_sports_transactions/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/rsforbes/pro_sports_transactions/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/rsforbes/pro_sports_transactions/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/rsforbes/pro_sports_transactions/releases/tag/v1.0.0
