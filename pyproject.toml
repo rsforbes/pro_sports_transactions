@@ -64,9 +64,9 @@ Documentation = "https://github.com/rsforbes/pro_sports_transactions/blob/main/R
 
 [dependency-groups]
 dev = [
-  "pytest>=7.3.1,<8",
-  "pytest-asyncio>=0.21.0,<0.22",
-  "pytest-mock>=3.10.0,<4",
+  "pytest>=9.0,<10",
+  "pytest-asyncio>=1.3,<2",
+  "pytest-mock>=3.14,<4",
   "ruff>=0.15.4",
 ]
 
@@ -98,6 +98,10 @@ known-first-party = ["pro_sports_transactions"]
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
 pythonpath = ["src"]
+
+# Async tests use explicit @pytest.mark.asyncio markers; pin strict mode so the
+# suite doesn't depend on it remaining pytest-asyncio's default.
+asyncio_mode = "strict"
 
 # Markers for different test types
 addopts = "--strict-markers"
