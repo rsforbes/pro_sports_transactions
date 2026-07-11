@@ -1,0 +1,42 @@
+# Dependabot configuration.
+#
+# Two ecosystems: the uv-managed Python dependencies (pyproject.toml + uv.lock
+# at the repo root) and the GitHub Actions used in workflows.
+#
+# commit-message matters here: this repo enforces Conventional Commits on PR
+# titles (see .github/workflows/pr-title.yml), and Dependabot's default
+# "Bump X from A to B" titles would fail that check. `prefix` applies to both
+# commit messages and PR titles; `include: "scope"` appends the dependency scope
+# so Dependabot emits "<prefix>(deps): bump ..." for runtime deps and
+# "<prefix>(deps-dev): bump ..." for dev-group deps — both valid Conventional
+# Commit titles that pass the check.
+version: 2
+updates:
+  # Python dependencies managed by uv.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    groups:
+      # Collapse minor/patch bumps into a single weekly PR to cut noise; major
+      # updates still come as individual PRs so breaking changes get their own
+      # review.
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions referenced in .github/workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions:
+        patterns: ["*"]
