@@ -1,0 +1,58 @@
+# CI — run the unit test suite across every supported Python version.
+#
+# The published package supports Python >=3.11, so the `test` matrix runs the
+# suite on each currently-supported CPython (3.11–3.14) to guarantee that
+# support contract. When the floor moves (e.g. 3.11 reaches EOL), drop that leg
+# and bump the Python floor + classifiers in pyproject.toml.
+#
+# `ci` is an aggregate gate job: make THIS the required status check in branch
+# protection. It reports a single stable name ("CI") regardless of how many
+# matrix legs exist, so adding/removing a Python version never breaks branch
+# protection config — and it stays stable when the toolchain moves to uv.
+
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # one version failing still reports the others
+      matrix:
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Poetry
+        run: pipx install poetry
+      - name: Install dependencies
+        run: poetry install
+      - name: Test
+        run: poetry run pytest
+
+  # Aggregate gate for branch protection. Passes when every job succeeded or was
+  # skipped; fails otherwise. Set this ("CI") as the required status check.
+  ci:
+    name: CI
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all jobs passed
+        run: |
+          for r in ${{ needs.test.result }}; do
+            if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
+              echo "Job failed: $r"
+              exit 1
+            fi
+          done
+          echo "All jobs passed"

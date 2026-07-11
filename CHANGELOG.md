@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- CI workflow running the unit test suite across Python 3.11–3.14 on every pull request
+- Python version Trove classifiers (3.11–3.14) advertising the supported release range
+
+### Fixed
+- Unit tests resolve their HTML response fixtures relative to the test file instead of a hardcoded absolute path, so the suite runs outside the original dev container (e.g. in CI)
+
 ## [1.1.2] - 2026-02-07
 
 ### Fixed
