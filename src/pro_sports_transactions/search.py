@@ -8,6 +8,7 @@ import json
 import warnings
 from datetime import date
 from enum import Enum, StrEnum
+from io import StringIO
 from typing import Dict, Optional
 from urllib import parse
 
@@ -97,7 +98,11 @@ class Search:
 
         df = None
         try:
-            df_list = read_html(response, header=0, keep_default_na=False)
+            # Wrap the HTML in StringIO: pandas 3.0 dropped read_html's implicit
+            # acceptance of a literal HTML string (it now treats a bare str as a
+            # path/URL). StringIO is also accepted by pandas 2.2.x, so this works
+            # across the whole supported range.
+            df_list = read_html(StringIO(response), header=0, keep_default_na=False)
             df = pd.DataFrame(
                 df_list[0],
                 columns=["Date", "Team", "Acquired", "Relinquished", "Notes"],
