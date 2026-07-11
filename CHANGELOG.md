@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `Search` and `UrlBuilder.build` now resolve their default `start_date`/`end_date` at call time instead of freezing `date.today()` at import time, so a long-lived process no longer defaults to its import-day date ([#27](https://github.com/rsforbes/pro_sports_transactions/issues/27))
 - Unit tests resolve their HTML response fixtures relative to the test file instead of a hardcoded absolute path, so the suite runs outside the original dev container (e.g. in CI)
+- Dev container now mounts the repo at `/workspace` (via `workspaceFolder`/`workspaceMount`) to match the Dockerfile's `WORKDIR` and `UV_PROJECT_ENVIRONMENT`, so `uv sync` in post-create no longer fails with `Permission denied` creating `/workspace/.venv` on a clean rebuild
 
 ## [1.1.2] - 2026-02-07
 
