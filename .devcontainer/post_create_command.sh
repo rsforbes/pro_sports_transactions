@@ -8,6 +8,11 @@ set -e
 # Display status message to user during container setup
 echo "Setting up development environment..."
 
+# The ~/.claude directory is backed by a named volume (see devcontainer.json)
+# so Claude Code history/memory survives rebuilds. Named volumes mount
+# root-owned on first creation, so hand ownership to the vscode user.
+sudo chown -R vscode:vscode /home/vscode/.claude 2>/dev/null || true
+
 # Install all dependencies (including the dev group) from pyproject.toml and
 # uv.lock into ./.venv. --frozen fails loudly if the lock is out of sync rather
 # than silently re-resolving, so the container matches CI exactly.
