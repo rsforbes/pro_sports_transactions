@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI workflow running the unit test suite across Python 3.11–3.14 on every pull request
 - Python version Trove classifiers (3.11–3.14) advertising the supported release range
 - Dev container persists Claude Code history and memory across rebuilds (named volume on `~/.claude`) and installs the GitHub CLI via the `github-cli` dev container feature
+- Dependabot configuration for weekly uv and GitHub Actions dependency updates (minor/patch bumps grouped, Conventional-Commit PR titles)
 
 ### Changed
 - Migrated the project toolchain from Poetry to [uv](https://docs.astral.sh/uv/) (`uv.lock` replaces `poetry.lock`; build backend is now hatchling)
