@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI workflow running the unit test suite across Python 3.11–3.14 on every pull request
 - Python version Trove classifiers (3.11–3.14) advertising the supported release range
 
+### Changed
+- Migrated the project toolchain from Poetry to [uv](https://docs.astral.sh/uv/) (`uv.lock` replaces `poetry.lock`; build backend is now hatchling)
+- Replaced black, flake8, isort, and pylint with [Ruff](https://docs.astral.sh/ruff/) for formatting and linting
+- Raised the pandas floor to `>=2.2.2` (the first release with numpy 2 support) so the declared minimum resolves against modern numpy; a `--resolution lowest-direct` CI leg now guards it
+
 ### Fixed
 - Unit tests resolve their HTML response fixtures relative to the test file instead of a hardcoded absolute path, so the suite runs outside the original dev container (e.g. in CI)
 

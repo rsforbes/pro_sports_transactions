@@ -7,8 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from pro_sports_transactions.handlers import (UnflareConfig,
-                                              UnflareRequestHandler)
+from pro_sports_transactions.handlers import UnflareConfig, UnflareRequestHandler
 
 
 class TestUnflareHandler:

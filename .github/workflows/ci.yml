@@ -1,14 +1,19 @@
-# CI — run the unit test suite across every supported Python version.
+# CI — lint once, run the test suite across every supported Python version, and
+# guard the declared dependency floor.
 #
 # The published package supports Python >=3.11, so the `test` matrix runs the
 # suite on each currently-supported CPython (3.11–3.14) to guarantee that
 # support contract. When the floor moves (e.g. 3.11 reaches EOL), drop that leg
 # and bump the Python floor + classifiers in pyproject.toml.
 #
+# `lowest-direct` installs the *lowest* versions allowed by our direct
+# dependency constraints (uv --resolution lowest-direct) and runs the suite, so
+# a too-low floor (e.g. the pandas/numpy 2 ABI break) fails here instead of in a
+# user's install.
+#
 # `ci` is an aggregate gate job: make THIS the required status check in branch
-# protection. It reports a single stable name ("CI") regardless of how many
-# matrix legs exist, so adding/removing a Python version never breaks branch
-# protection config — and it stays stable when the toolchain moves to uv.
+# protection. It reports a single stable name ("CI") regardless of how many jobs
+# or matrix legs exist, so changing them never breaks branch protection config.
 
 name: CI
 
@@ -20,8 +25,24 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Ruff format check
+        run: uv run ruff format --check .
+      - name: Ruff lint
+        run: uv run ruff check .
+
   test:
     name: Test (py${{ matrix.python-version }})
+    needs: lint
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false # one version failing still reports the others
@@ -29,27 +50,39 @@ jobs:
         python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install Poetry
-        run: pipx install poetry
       - name: Install dependencies
-        run: poetry install
+        run: uv sync --frozen
       - name: Test
-        run: poetry run pytest
+        run: uv run pytest
+
+  lowest-direct:
+    name: Test (lowest-direct floor)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.11'
+      - name: Install lowest allowed direct dependencies
+        run: uv sync --resolution lowest-direct
+      - name: Test
+        run: uv run pytest
 
   # Aggregate gate for branch protection. Passes when every job succeeded or was
   # skipped; fails otherwise. Set this ("CI") as the required status check.
   ci:
     name: CI
     if: always()
-    needs: [test]
+    needs: [lint, test, lowest-direct]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all jobs passed
         run: |
-          for r in ${{ needs.test.result }}; do
+          for r in ${{ needs.lint.result }} ${{ needs.test.result }} ${{ needs.lowest-direct.result }}; do
             if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
               echo "Job failed: $r"
               exit 1

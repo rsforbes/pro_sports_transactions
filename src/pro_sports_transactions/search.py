@@ -30,7 +30,7 @@ class League(StrEnum):
 class TransactionType(Enum):
     """Transaction types available for filtering sports transactions."""
 
-    # pylint: disable=invalid-name  # Maintaining backwards compatibility
+    # Maintaining backwards compatibility
     Disciplinary = {"default": "DisciplinaryChkBx"}
     InjuredList = {"default": "ILChkBx", "MLB": "DLChkBx"}
     Injury = {"default": "InjuriesChkBx"}
@@ -50,7 +50,7 @@ class TransactionType(Enum):
 class Search:
     """Main class for searching professional sports transactions."""
 
-    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(
         self,
         league: League = League.NBA,
         transaction_types: TransactionType = (),
@@ -143,7 +143,7 @@ headers = {
 }
 
 
-class Parameter:  # pylint: disable=too-few-public-methods
+class Parameter:
     """Utility class for creating search parameters."""
 
     @staticmethod
@@ -187,11 +187,11 @@ class Parameter:  # pylint: disable=too-few-public-methods
         return {"Submit": "Search"}
 
 
-class UrlBuilder:  # pylint: disable=too-few-public-methods
+class UrlBuilder:
     """Utility class for building search URLs."""
 
     @staticmethod
-    def build(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def build(
         league=League.NBA,
         transaction_types=(),
         start_date: date = date.today(),
@@ -219,7 +219,7 @@ class UrlBuilder:  # pylint: disable=too-few-public-methods
 
 
 # Backward compatibility - deprecated Http class
-class Http:  # pylint: disable=too-few-public-methods
+class Http:
     """
     Deprecated: Use DirectRequestHandler from .handlers instead.
     This class is kept for backward compatibility and will be removed in v2.0.

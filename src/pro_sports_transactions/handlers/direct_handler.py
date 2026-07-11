@@ -7,7 +7,7 @@ import aiohttp
 from .base_handler import RequestHandler
 
 
-class DirectRequestHandler(RequestHandler):  # pylint: disable=too-few-public-methods
+class DirectRequestHandler(RequestHandler):
     """Direct HTTP request handler - no proxy or special handling"""
 
     async def get(self, url: str, headers: Dict[str, str]) -> Optional[str]:

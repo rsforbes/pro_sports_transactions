@@ -12,8 +12,7 @@ import logging
 from datetime import date
 
 from pro_sports_transactions import League, Search, TransactionType
-from pro_sports_transactions.handlers import (UnflareConfig,
-                                              UnflareRequestHandler)
+from pro_sports_transactions.handlers import UnflareConfig, UnflareRequestHandler
 
 # Adjust log level to see debug output from the handler:
 #   logging.DEBUG  - shows fast/slow path decisions
