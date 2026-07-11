@@ -8,15 +8,14 @@ set -e
 # Display status message to user during container setup
 echo "Setting up development environment..."
 
-# Install all dependencies from pyproject.toml and poetry.lock
-# --with linting,test includes optional dependency groups for development tools
-# This creates the .venv directory and installs packages inside it
-poetry install
+# Install all dependencies (including the dev group) from pyproject.toml and
+# uv.lock into ./.venv. --frozen fails loudly if the lock is out of sync rather
+# than silently re-resolving, so the container matches CI exactly.
+uv sync --frozen
 
-# Configure shell activation for all future terminal sessions
-# This adds a command to .bashrc that automatically activates the Poetry environment
-# The '2>/dev/null || true' suppresses errors if Poetry environment doesn't exist yet
-echo 'eval "$(poetry env activate)" 2>/dev/null || true' >> ~/.bashrc
+# Configure shell activation for all future terminal sessions so the project's
+# .venv is active in every new terminal. Guarded so a missing venv is not fatal.
+echo 'source /workspace/.venv/bin/activate 2>/dev/null || true' >> ~/.bashrc
 
 # Display completion message to user
-echo "Setup complete! Poetry environment activated."
+echo "Setup complete! uv environment activated."
