@@ -59,3 +59,27 @@ def test_build_url(league_param: League):
     assert expected.netloc == actual.netloc
     assert expected.path == actual.path
     assert parse.parse_qs(actual.query) == parse.parse_qs(expected.query)
+
+
+@pytest.mark.unit
+def test_default_dates_resolved_at_call_time(monkeypatch):
+    """Default start/end dates must be evaluated per call, not frozen at import.
+
+    Regression test for date.today() used as an argument default, which Python
+    evaluates once at import time. Patch the module's date so today() returns a
+    fixed value, then assert the URL built with default dates reflects it —
+    proving the default is read when build() runs, not when the module loaded.
+    """
+    from pro_sports_transactions import search as search_module
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2030, 1, 2)
+
+    monkeypatch.setattr(search_module, "date", FixedDate)
+
+    query = parse.parse_qs(parse.urlparse(UrlBuilder.build()).query)
+
+    assert query["BeginDate"] == ["2030-01-02"]
+    assert query["EndDate"] == ["2030-01-02"]
