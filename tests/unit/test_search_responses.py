@@ -1,9 +1,13 @@
 """Unit tests for search response handling."""
 
+from pathlib import Path
+
 import pytest
 
 import pro_sports_transactions as pst
 from pro_sports_transactions.search import TransactionType
+
+DATA_DIR = Path(__file__).parent / "data"
 
 
 @pytest.fixture
@@ -34,7 +38,7 @@ def mock_valid_reponse(create_mock_coro):  # pylint: disable=redefined-outer-nam
     response = None
     # read https://www.prosportstransactions.com/ search results
     with open(
-        r"/workspaces/pro_sports_transactions/tests/unit/data/valid_response.html",
+        DATA_DIR / "valid_response.html",
         mode="r",
         encoding="utf-8",
     ) as f:
@@ -52,7 +56,7 @@ def mock_empty_reponse(create_mock_coro):  # pylint: disable=redefined-outer-nam
     response = None
     # read https://www.prosportstransactions.com/ search results
     with open(
-        r"/workspaces/pro_sports_transactions/tests/unit/data/empty_response.html",
+        DATA_DIR / "empty_response.html",
         mode="r",
         encoding="utf-8",
     ) as f:
