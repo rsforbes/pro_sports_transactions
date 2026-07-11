@@ -54,13 +54,20 @@ class Search:
         self,
         league: League = League.NBA,
         transaction_types: TransactionType = (),
-        start_date: date = date.today(),
-        end_date: date = date.today(),
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
         player: str = None,
         team: str = None,
         starting_row: int = 0,
         request_handler: Optional[RequestHandler] = None,
     ):
+        # Resolve date defaults at call time. Using date.today() as an argument
+        # default would freeze the value at import time (evaluated once), so a
+        # long-lived process would keep defaulting to its import day.
+        if start_date is None:
+            start_date = date.today()
+        if end_date is None:
+            end_date = date.today()
         self._url = UrlBuilder.build(
             league=league,
             transaction_types=transaction_types,
@@ -194,13 +201,18 @@ class UrlBuilder:
     def build(
         league=League.NBA,
         transaction_types=(),
-        start_date: date = date.today(),
-        end_date: date = date.today(),
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
         player=None,
         team=None,
         starting_row=None,
     ):
         """Build search URL with given parameters."""
+        # Resolve date defaults at call time (see Search.__init__).
+        if start_date is None:
+            start_date = date.today()
+        if end_date is None:
+            end_date = date.today()
         params = {}
         params |= Parameter.start_date(start_date)
         params |= Parameter.end_date(end_date)
