@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrated the project toolchain from Poetry to [uv](https://docs.astral.sh/uv/) (`uv.lock` replaces `poetry.lock`; build backend is now hatchling)
 - Replaced black, flake8, isort, and pylint with [Ruff](https://docs.astral.sh/ruff/) for formatting and linting
 - Raised the pandas floor to `>=2.2.2` (the first release with numpy 2 support) so the declared minimum resolves against modern numpy; a `--resolution lowest-direct` CI leg now guards it
+- Enabled Ruff's flake8-bugbear (`B`) lint rules to catch likely-bug patterns (e.g. function calls in argument defaults)
 
 ### Fixed
 - `Search` and `UrlBuilder.build` now resolve their default `start_date`/`end_date` at call time instead of freezing `date.today()` at import time, so a long-lived process no longer defaults to its import-day date ([#27](https://github.com/rsforbes/pro_sports_transactions/issues/27))
