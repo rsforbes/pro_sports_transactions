@@ -18,8 +18,7 @@ from typing import List
 import aiohttp
 import pytest
 
-from pro_sports_transactions.handlers import (UnflareConfig,
-                                              UnflareRequestHandler)
+from pro_sports_transactions.handlers import UnflareConfig, UnflareRequestHandler
 from pro_sports_transactions.search import League, Search
 
 from ..config import get_performance_thresholds
@@ -137,9 +136,9 @@ async def test_unflare_cache_speedup():
     )
 
     # Additional validation - cached requests should be reasonably fast
-    assert (
-        cached_avg_time < 5.0
-    ), f"Cached requests average {cached_avg_time:.2f}s, should be under 5s"
+    assert cached_avg_time < 5.0, (
+        f"Cached requests average {cached_avg_time:.2f}s, should be under 5s"
+    )
 
 
 @pytest.mark.performance

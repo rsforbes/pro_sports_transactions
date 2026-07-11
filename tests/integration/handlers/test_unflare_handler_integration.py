@@ -5,8 +5,7 @@ import asyncio
 import aiohttp
 import pytest
 
-from pro_sports_transactions.handlers import (UnflareConfig,
-                                              UnflareRequestHandler)
+from pro_sports_transactions.handlers import UnflareConfig, UnflareRequestHandler
 from pro_sports_transactions.search import headers
 
 

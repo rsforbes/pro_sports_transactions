@@ -1,21 +1,20 @@
 {
     "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        }
+    },
     "python.analysis.extraPaths": [
-        "/home/vscode/.cache/pypoetry/virtualenvs/pro-sports-transactions-r87VqQwT-py3.11/lib/python3.11/site-packages",
-        "/workspaces/pro_sports_transactions/src"
+        "${workspaceFolder}/src"
     ],
-    "python.linting.flake8Enabled": true,
-    "python.linting.pylintEnabled": true,
-    "python.linting.pylintPath": ".venv/bin/pylint",
     "python.defaultInterpreterPath": ".venv/bin/python",
-    "python.formatting.provider": "black",
-    "python.formatting.blackArgs": [
-        "--line-length",
-        "88"
-    ],
     "python.analysis.diagnosticSeverityOverrides": {
         "reportUnboundVariable": "information",
         "reportImplicitStringConcatenation": "warning",
-        "reportUntypedFunctionDecorator": "information",
+        "reportUntypedFunctionDecorator": "information"
     }
 }

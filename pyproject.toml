@@ -1,13 +1,12 @@
-[tool.poetry]
+[project]
 name = "pro_sports_transactions"
 version = "1.1.2"
 description = "A Python Library for Consuming Transactions from Pro Sports Transactions (https://www.prosportstransactions.com)"
-license = "MIT"
-authors = ["Randy Forbes <randy.forbes@gmail.com>"]
 readme = "README.md"
-maintainers = ["Randy Forbes <randy.forbes@gmail.com>"]
-repository = "https://github.com/rsforbes/pro_sports_transactions"
-documentation = "https://github.com/rsforbes/pro_sports_transactions/blob/main/README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Randy Forbes", email = "randy.forbes@gmail.com" }]
+maintainers = [{ name = "Randy Forbes", email = "randy.forbes@gmail.com" }]
 keywords = [
   "api",
   "basketball",
@@ -46,28 +45,54 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Topic :: Software Development",
 ]
+dependencies = [
+  "aiohttp>=3.13.3,<4",
+  # pandas floor is 2.2.2, not 2.0.0: pandas <2.2.2 was compiled against the
+  # numpy 1.x C-ABI, so resolving the declared floor against numpy >=2 fails at
+  # import with "ValueError: numpy.dtype size changed". 2.2.2 is the first
+  # release with numpy-2 support. The lowest-direct CI leg guards this floor.
+  "pandas>=2.2.2,<3",
+  "brotli>=1.2.0,<2",
+  "lxml>=4.9.2,<7.0.0",
+  "html5lib>=1.1,<2",
+  "bs4>=0.0.1,<0.0.2",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-aiohttp = "^3.13.3"
-pandas = "^2.0.0"
-brotli = "^1.2.0"
-lxml = ">=4.9.2,<7.0.0"
-html5lib = "^1.1"
-bs4 = "^0.0.1"
+[project.urls]
+Repository = "https://github.com/rsforbes/pro_sports_transactions"
+Documentation = "https://github.com/rsforbes/pro_sports_transactions/blob/main/README.md"
 
-[tool.poetry.group.dev.dependencies]
-black = ">=23.3,<27.0"
-flake8 = "^6.0.0"
-pytest = "^7.3.1"
-pytest-asyncio = "^0.21.0"
-pytest-mock = "^3.10.0"
-isort = "^6.0.1"
-pylint = "^3.3.7"
+[dependency-groups]
+dev = [
+  "pytest>=7.3.1,<8",
+  "pytest-asyncio>=0.21.0,<0.22",
+  "pytest-mock>=3.10.0,<4",
+  "ruff>=0.15.4",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pro_sports_transactions"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort — mirrors what the prior
+# black + flake8 + isort stack actually enforced. E203 and E501 are owned by
+# the formatter (line wrapping), so they're disabled here to avoid
+# double-reporting. (flake8-bugbear "B" was listed in the old .flake8 select but
+# the plugin was never installed, so it never ran — adopting it is a follow-up.)
+select = ["E", "F", "W", "I"]
+ignore = ["E203", "E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pro_sports_transactions"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
@@ -88,7 +113,3 @@ markers = [
 unflare_cache_hit_speedup = 10.0 # Cache hits should be 10x faster than misses
 direct_request_timeout = 5.0     # Direct requests should timeout within 5s
 unflare_first_request_max = 30.0 # First Unflare request max time in seconds
-
-[tool.pylint.master]
-# Exclude directories
-ignore-paths = ["^.venv/.*$", "^venv/.*$", "^__pycache__/.*$", "^.git/.*$"]

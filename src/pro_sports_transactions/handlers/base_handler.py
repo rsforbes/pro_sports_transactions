@@ -10,7 +10,7 @@ class RequestConfig:
     """Base configuration for request handling"""
 
 
-class RequestHandler(ABC):  # pylint: disable=too-few-public-methods
+class RequestHandler(ABC):
     """Abstract base class for handling HTTP requests"""
 
     @abstractmethod

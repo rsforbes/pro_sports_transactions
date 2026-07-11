@@ -33,7 +33,7 @@ def create_mock_coro(mocker, monkeypatch):
 
 
 @pytest.fixture(name="valid_response_mock")
-def mock_valid_reponse(create_mock_coro):  # pylint: disable=redefined-outer-name
+def mock_valid_reponse(create_mock_coro):
     """Mock fixture for valid search response."""
     response = None
     # read https://www.prosportstransactions.com/ search results
@@ -51,7 +51,7 @@ def mock_valid_reponse(create_mock_coro):  # pylint: disable=redefined-outer-nam
 
 
 @pytest.fixture(name="empty_response_mock")
-def mock_empty_reponse(create_mock_coro):  # pylint: disable=redefined-outer-name
+def mock_empty_reponse(create_mock_coro):
     """Mock fixture for empty search response."""
     response = None
     # read https://www.prosportstransactions.com/ search results
@@ -70,7 +70,7 @@ def mock_empty_reponse(create_mock_coro):  # pylint: disable=redefined-outer-nam
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_valid_response(valid_response_mock):  # pylint: disable=unused-argument
+async def test_valid_response(valid_response_mock):
     """Test parsing valid search response."""
     expected = "".join(
         (
@@ -96,7 +96,7 @@ async def test_valid_response(valid_response_mock):  # pylint: disable=unused-ar
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_empty_response(empty_response_mock):  # pylint: disable=unused-argument
+async def test_empty_response(empty_response_mock):
     """Test parsing empty search response."""
     transaction_types = tuple(TransactionType)
 

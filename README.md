@@ -156,10 +156,10 @@ unflare_first_request_max = 30.0  # First Unflare request max time in seconds
 Run performance tests:
 ```bash
 # Run performance tests
-poetry run pytest tests/performance/ -m performance
+uv run pytest tests/performance/ -m performance
 
 # Run specific performance tests
-poetry run pytest tests/performance/handlers/test_unflare_performance.py::test_unflare_cache_speedup
+uv run pytest tests/performance/handlers/test_unflare_performance.py::test_unflare_cache_speedup
 ```
 
 ## Troubleshooting
@@ -219,19 +219,19 @@ The library includes comprehensive test suites with different categories:
 ## Running Tests
 ```bash
 # Run all unit tests (default)
-poetry run pytest
+uv run pytest
 
 # Run integration tests (requires external services)
-poetry run pytest tests/integration/ -m integration
+uv run pytest tests/integration/ -m integration
 
 # Run performance tests
-poetry run pytest tests/performance/ -m performance
+uv run pytest tests/performance/ -m performance
 
 # Run all tests
-poetry run pytest tests/ -m "unit or integration or performance"
+uv run pytest tests/ -m "unit or integration or performance"
 
 # Run tests with coverage
-poetry run pytest --cov=src/pro_sports_transactions
+uv run pytest --cov=src/pro_sports_transactions
 ```
 
 ## Test Categories
@@ -241,49 +241,46 @@ poetry run pytest --cov=src/pro_sports_transactions
 
 # Development
 
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management and
+[Ruff](https://docs.astral.sh/ruff/) for formatting and linting.
+
 ## Code Quality
 The project maintains high code quality standards:
 
 ```bash
-# Code formatting
-poetry run black .
+# Format code
+uv run ruff format .
 
-# Linting (10/10 score maintained)
-poetry run pylint .
-
-# Import sorting
-poetry run isort .
-
-# Type checking
-poetry run flake8
+# Lint (and auto-fix where possible)
+uv run ruff check --fix .
 ```
 
 ## Contributing
-1. Install dependencies: `poetry install`
-2. Run tests: `poetry run pytest`
-3. Ensure pylint score: `poetry run pylint .` (should be 10/10)
-4. Format code: `poetry run black .`
+1. Install dependencies: `uv sync --group dev`
+2. Run tests: `uv run pytest`
+3. Format code: `uv run ruff format .`
+4. Lint code: `uv run ruff check .`
+
+Pull request titles must follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) —
+see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 # Requirements
 Pro Sports Transactions presents data in an HTML table. To make retrieval easy, [`pandas.read_html`](https://pandas.pydata.org/docs/reference/api/pandas.read_html.html) is used which in turn results in additional depencies. The following are a list of required libraries: 
 
 ## Runtime Dependencies
-- python = "^3.11"
-- aiohttp = "^3.8.4"
-- pandas = "^2.0.0"
-- brotli = "^1.0.9"
-- lxml = "^4.9.2"
-- html5lib = "^1.1"
-- bs4 = "^0.0.1"
+- python >=3.11
+- aiohttp >=3.13.3,<4
+- pandas >=2.0.0,<3
+- brotli >=1.2.0,<2
+- lxml >=4.9.2,<7.0.0
+- html5lib >=1.1,<2
+- bs4 >=0.0.1,<0.0.2
 
 ## Development Dependencies
-- black = "^23.3.0"
-- flake8 = "^6.0.0"
-- pytest = "^7.3.1"
-- pytest-asyncio = "^0.21.0"
-- pytest-mock = "^3.10.0"
-- isort = "^6.0.1"
-- pylint = "^3.3.7"
+- pytest >=7.3.1,<8
+- pytest-asyncio >=0.21.0,<0.22
+- pytest-mock >=3.10.0,<4
+- ruff >=0.15.4
 
 &nbsp;
 # Thank You Frank Marousek!
