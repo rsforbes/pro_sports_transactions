@@ -84,11 +84,12 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 # E/W pycodestyle, F pyflakes, I isort — mirrors what the prior
-# black + flake8 + isort stack actually enforced. E203 and E501 are owned by
-# the formatter (line wrapping), so they're disabled here to avoid
-# double-reporting. (flake8-bugbear "B" was listed in the old .flake8 select but
-# the plugin was never installed, so it never ran — adopting it is a follow-up.)
-select = ["E", "F", "W", "I"]
+# black + flake8 + isort stack actually enforced. B is flake8-bugbear (likely
+# bug patterns); it was listed in the old .flake8 select but the plugin was
+# never installed, so it never actually ran until now. E203 and E501 are owned
+# by the formatter (line wrapping), so they're disabled here to avoid
+# double-reporting.
+select = ["E", "F", "W", "I", "B"]
 ignore = ["E203", "E501"]
 
 [tool.ruff.lint.isort]
