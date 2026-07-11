@@ -10,7 +10,14 @@
         // This allows Docker to access project files outside the .devcontainer directory
         "context": ".."
     },
-    
+
+    // Dev container features layered onto the image. The github-cli feature
+    // installs `gh` via the devcontainers-maintained recipe, avoiding a manual
+    // apt/gpg setup in the Dockerfile.
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+
     // VS Code specific customizations
     "customizations": {
         "vscode": {
@@ -54,7 +61,15 @@
     
     // Use host networking to access services (e.g. unflare) running on host
     "runArgs": ["--network=host"],
-    
+
+    // Persist Claude Code state across container rebuilds. A named volume backs
+    // ~/.claude (session history, per-project data, and memory) so it survives
+    // "Rebuild Container". post_create_command.sh fixes its ownership since
+    // named volumes are created root-owned.
+    "mounts": [
+        "source=pst-claude-home,target=/home/vscode/.claude,type=volume"
+    ],
+
     // User to connect as when attaching to the container
     // "vscode" user has proper permissions and development tools pre-configured
     "remoteUser": "vscode",
