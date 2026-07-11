@@ -11,6 +11,14 @@
         "context": ".."
     },
 
+    // Mount the repo at /workspace (not the CLI default /workspaces/<repo>) so it
+    // matches the Dockerfile's WORKDIR and UV_PROJECT_ENVIRONMENT=/workspace/.venv,
+    // the interpreter path below, and the .bashrc activation line. Without this the
+    // default mount lands elsewhere and /workspace is a stray root-owned dir, so
+    // `uv sync` in post-create fails to create /workspace/.venv (Permission denied).
+    "workspaceFolder": "/workspace",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+
     // Dev container features layered onto the image. The github-cli feature
     // installs `gh` via the devcontainers-maintained recipe, avoiding a manual
     // apt/gpg setup in the Dockerfile.
