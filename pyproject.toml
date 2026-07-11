@@ -51,7 +51,7 @@ dependencies = [
   # numpy 1.x C-ABI, so resolving the declared floor against numpy >=2 fails at
   # import with "ValueError: numpy.dtype size changed". 2.2.2 is the first
   # release with numpy-2 support. The lowest-direct CI leg guards this floor.
-  "pandas>=2.2.2,<3",
+  "pandas>=2.2.2,<4",
   "brotli>=1.2.0,<2",
   "lxml>=4.9.2,<7.0.0",
   "html5lib>=1.1,<2",
