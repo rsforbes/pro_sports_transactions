@@ -60,6 +60,16 @@ dependencies = [
   "bs4>=0.0.1,<0.0.2",
 ]
 
+[project.optional-dependencies]
+# In-process Cloudflare bypass via a real Chrome browser (NodriverRequestHandler).
+# Also requires a real Google Chrome install (not pip-installable) and, on a
+# headless host, a virtual display such as xvfb. opencv-python backs nodriver's
+# verify_cf() Turnstile-checkbox detection. See docs/nodriver/README.md.
+nodriver = [
+  "nodriver>=0.50,<1",
+  "opencv-python>=4.9,<5",
+]
+
 [project.urls]
 Repository = "https://github.com/rsforbes/pro_sports_transactions"
 Documentation = "https://github.com/rsforbes/pro_sports_transactions/blob/main/README.md"

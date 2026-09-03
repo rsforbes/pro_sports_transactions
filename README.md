@@ -3,49 +3,102 @@
 [![License: MIT](https://img.shields.io/github/license/rsforbes/pro_sports_transactions.svg?style=for-the-badge)](https://github.com/rsforbes/pro_sports_transactions/blob/master/LICENSE)
 
 # Pro Sports Transactions API
-
 Pro Sports Transactions is a Python API client-library for https://www.prosportstransactions.com enabling software engineers, data scientists, and sports fans with the ability to easily retrieve trades, free agent movements, signings, injuries, disciplinary actions, legal/criminal actions, and much more for five of the North American professional leagues: MLB, MLS, NBA, NFL, and NHL.
 
-## ⚠️ Important Notice
-
-**Due to Cloudflare protection on prosportstransactions.com, direct requests are typically blocked.** To use this library effectively, you'll need to run the [Unflare service](https://github.com/iamyegor/Unflare) alongside this library and use the `UnflareRequestHandler`.
-
-## Features
-
-- 🏀 **Multi-Sport Support**: MLB, MLS, NBA, NFL, and NHL
-- 🚀 **Multiple Request Handlers**: Direct requests or Cloudflare bypass with UnflareRequestHandler
-- ⚡ **Performance Testing**: Built-in configurable performance benchmarks
-- 🧪 **Comprehensive Testing**: Unit, integration, and performance test suites
-- 📊 **Multiple Output Formats**: DataFrame, dict, or JSON
-- 🔧 **Configurable**: Performance thresholds and request handling options
-
-&nbsp;
-# About
-What is sports data without the transactions?
+## What is sports data without the transactions?
 - "Did he just throw his mouthpiece into the stands?"
 - "Yep."
 
 `2023-01-27	| Warriors | • Stephen Curry | fined $25,000 by NBA for throwing his mouthpiece into the stands`
+
+## Features
+
+- 🏀 **Multi-Sport Support**: MLB, MLS, NBA, NFL, and NHL
+- 🚀 **Multiple Request Handlers**: In-process Cloudflare bypass (`NodriverRequestHandler`) or the Unflare sidecar (`UnflareRequestHandler`)
+- ⚡ **Performance Testing**: Built-in configurable performance benchmarks
+- 🧪 **Comprehensive Testing**: Unit, integration, and performance test suites
+- 📊 **Multiple Output Formats**: DataFrame, dict, or JSON
+- 🔧 **Configurable**: Performance thresholds and request handling options
+## ⚠️ Important Notice
+
+**prosportstransactions.com is protected by a Cloudflare challenge, direct requests are typically blocked.** You'll need a Cloudflare-bypass request handler. Two are provided:
+
+- **`NodriverRequestHandler`** — solves the challenge **in-process** with a real Chrome browser (via [nodriver](https://github.com/ultrafunkamsterdam/nodriver)). Enable it with the `nodriver` extra: `pip install pro_sports_transactions[nodriver]`. The extra installs `nodriver` + `opencv-python` only — you also need Google Chrome present (nodriver uses an existing install; it does not download one) and, on a headless Linux host, a virtual display such as `xvfb`. Works on Windows, macOS, and Linux; see [Prerequisites](#prerequisites).
+- **`UnflareRequestHandler`** — delegates [Unflare](https://github.com/iamyegor/Unflare), a sidecar (container), that you run alongside your app.
+
+Both perform the same underlying bypass (a real browser clears the challenge and hands back a `cf_clearance` session that is cached and replayed). Choose nodriver to avoid running a sidecar, or Unflare to keep the browser stack out of your application process. See [Choosing a handler](#choosing-a-handler).
   
-&nbsp;
 # Getting Started
 
 ## Prerequisites
 
-**⚠️ Important**: Due to Cloudflare protection, you'll need to set up Unflare before using this library:
+Due to Cloudflare protection, you need a bypass handler. Pick one:
+
+**Option A — nodriver (in-process, no separate service):**
+
+Works on **Windows, macOS, and Linux**. Two things are *not* installed for you by pip and must be present:
+
+1. **The library + extra** — `pip install pro_sports_transactions[nodriver]`. This installs `nodriver` and `opencv-python`. It does **not** install a browser.
+2. **Google Chrome** — nodriver uses an existing Chrome install rather than downloading one, so make sure Google Chrome (not Chromium) is present. If you already have it, there's nothing to do; otherwise install it:
+   - **Windows / macOS**: get Chrome from <https://www.google.com/chrome/>. nodriver auto-detects it (e.g. `C:\Program Files\Google\Chrome\Application\chrome.exe`, `/Applications/Google Chrome.app`).
+   - **Linux**: install the `google-chrome-stable` package.
+   - If auto-detect picks the wrong binary, set `NodriverConfig(browser_executable_path=r"C:\path\to\chrome.exe")`.
+3. **A display** — the browser runs headful.
+   - **Windows, macOS, or Linux with a desktop**: nothing extra; it just works.
+   - **Headless Linux only** (server, container, CI, WSL without a desktop): install `xvfb` and launch under it, e.g. `xvfb-run -a python your_script.py`. Headless Chrome does not reliably clear the challenge. `xvfb` is Linux-only and is neither needed nor available on Windows/macOS.
+
+**Option B — Unflare (separate service):**
 
 1. **Install and run Unflare service**: Follow the setup instructions at [https://github.com/iamyegor/Unflare](https://github.com/iamyegor/Unflare)
 2. **Start the Unflare service** (typically runs on `http://localhost:5002`)
-3. **Use UnflareRequestHandler** in your code (see examples below)
+3. **Use `UnflareRequestHandler`** in your code (see examples below)
 
-## Quick Start (Recommended)
+### Choosing a handler
+
+| | `NodriverRequestHandler` | `UnflareRequestHandler` |
+| --- | --- | --- |
+| Separate service to run | No — in-process | Yes — the Unflare sidecar |
+| Extra install footprint | Chrome + `nodriver` extra + `xvfb` on servers | A running Unflare/Docker service |
+| Best when | You want a single `pip install` and no sidecar | You'd rather keep the browser stack out of your app process (e.g. a shared solver container) |
+
+Both cache the `cf_clearance` session after the first solve and replay cheap HTTP requests until it expires.
+
+## Quick Start with nodriver
+```python
+from datetime import date
+import asyncio
+import pro_sports_transactions as pst
+from pro_sports_transactions.handlers import NodriverRequestHandler, NodriverConfig
+
+# In-process Cloudflare bypass — no separate service required.
+# browser_executable_path defaults to auto-detect; set it to point at a
+# specific Chrome. On a headless host, run under xvfb (see Prerequisites).
+handler = NodriverRequestHandler(NodriverConfig())
+
+async def search_transactions():
+    async with handler:  # closes the browser on exit
+        return await pst.Search(
+            league=pst.League.NBA,
+            transaction_types=tuple(pst.TransactionType),
+            start_date=date.fromisoformat("2022-10-18"),
+            end_date=date.fromisoformat("2023-04-09"),
+            player="LeBron James",
+            team="Lakers",
+            request_handler=handler,  # IMPORTANT: use the bypass handler
+        ).get_dataframe()  # Also supports get_dict() and get_json()
+
+if __name__ == "__main__":
+    df = asyncio.run(search_transactions())
+```
+
+## Quick Start with Unflare
 ```python
 from datetime import date
 import asyncio
 import pro_sports_transactions as pst
 from pro_sports_transactions.handlers import UnflareRequestHandler, UnflareConfig
 
-# Configure Unflare handler (REQUIRED for bypassing Cloudflare)
+# Configure Unflare handler (bypasses Cloudflare via the Unflare service)
 config = UnflareConfig(url="http://localhost:5002/scrape")  # Your Unflare service URL
 handler = UnflareRequestHandler(config)
 
@@ -85,15 +138,14 @@ if __name__ == "__main__":
 
 ## Direct Usage (May Not Work)
 ```python
-# ⚠️ WARNING: Direct requests often fail due to Cloudflare protection
-# This example is provided for completeness but may not work reliably
+# Passing no request_handler issues a direct request (the default). Direct
+# requests are typically blocked by Cloudflare — shown here for completeness.
 
 async def search_transactions_direct():
-    # Direct usage without handler (likely to be blocked)
     return await pst.Search(
         league=pst.League.NBA,
-        transaction_types=tuple([t for t in pst.TransactionType]),
-        player="LeBron James"
+        transaction_types=tuple(pst.TransactionType),
+        player="LeBron James",
     ).get_dataframe()
 ```
 
@@ -103,11 +155,38 @@ async def search_transactions_direct():
 
 The library supports different request handlers for various scenarios:
 
-#### Unflare Handler (Recommended - Cloudflare Bypass)
+#### Nodriver Handler (In-Process Cloudflare Bypass)
+```python
+from pro_sports_transactions.handlers import NodriverRequestHandler, NodriverConfig
+
+# Requires the `nodriver` extra and a real Chrome install:
+#   pip install pro_sports_transactions[nodriver]
+config = NodriverConfig(
+    browser_executable_path=None,  # None = auto-detect Chrome; or set an explicit path
+    headless=False,                # keep False; use xvfb on headless hosts
+    verify_attempts=8,             # max Turnstile solve attempts
+)
+handler = NodriverRequestHandler(config)
+
+search = pst.Search(
+    league=pst.League.NBA,
+    transaction_types=(pst.TransactionType.Movement,),
+    request_handler=handler,
+)
+
+# The first request drives Chrome to clear the challenge and caches the
+# resulting cf_clearance session; later requests replay it over plain HTTP.
+print(f"Cache valid: {handler.is_cache_valid()}")
+
+# Reuse one handler across many requests to keep the browser warm, then close it:
+await handler.close()   # or use `async with handler:` as a context manager
+```
+
+#### Unflare Handler (Cloudflare Bypass via Service)
 ```python
 from pro_sports_transactions.handlers import UnflareRequestHandler, UnflareConfig
 
-# Configure Unflare service - REQUIRED for reliable access
+# Configure the Unflare service connection
 # First, set up Unflare: https://github.com/iamyegor/Unflare
 config = UnflareConfig(
     url="http://localhost:5002/scrape",  # Your Unflare service URL
@@ -128,18 +207,8 @@ print(f"Has cached cookies: {handler.has_cached_cookies}")
 ```
 
 #### Direct Handler (Not Recommended - Often Blocked)
-```python
-from pro_sports_transactions.handlers import DirectRequestHandler
 
-# ⚠️ WARNING: Direct requests are typically blocked by Cloudflare
-# Use this only for testing or if you have alternative access
-handler = DirectRequestHandler()
-search = pst.Search(
-    league=pst.League.NBA,
-    transaction_types=(pst.TransactionType.Movement,),
-    request_handler=handler
-)
-```
+Direct requests are the **default**: constructing `Search(...)` without a `request_handler` already issues a direct request (equivalent to passing `DirectRequestHandler()`), so there's no need to wire it up explicitly — see [Direct Usage (May Not Work)](#direct-usage-may-not-work). `DirectRequestHandler` remains exported for callers that want to pass a handler explicitly. Either way, direct requests are typically blocked by Cloudflare; use a bypass handler for reliable access.
 
 ### Performance Testing
 
@@ -174,14 +243,20 @@ uv run pytest tests/performance/handlers/test_unflare_performance.py::test_unfla
   3. Verify the service is accessible: `curl http://localhost:5002/health` (if available)
 
 #### "TypeError: cannot parse from 'NoneType'" errors
-- **Cause**: Direct requests being blocked by Cloudflare
-- **Solution**: Use `UnflareRequestHandler` instead of default direct requests
+- **Cause**: Requests being blocked by Cloudflare (no bypass handler, or the handler could not clear the challenge)
+- **Solution**: Use a bypass handler — `NodriverRequestHandler` or `UnflareRequestHandler` — instead of default direct requests
+
+#### nodriver: request returns `None` / challenge never clears
+- **Chrome vs Chromium**: nodriver needs a real **Google Chrome**; unbranded Chromium is detected and will not clear the challenge. Set `NodriverConfig(browser_executable_path=...)` if auto-detect picks the wrong binary.
+- **Headless host**: run under a virtual display (`xvfb-run -a ...`); headless Chrome does not reliably solve the managed challenge.
+- **Missing extra**: ensure you installed `pro_sports_transactions[nodriver]` (it also pulls in `opencv-python`, used to click the Turnstile checkbox).
 
 #### Slow performance on first request
-- **Expected**: First Unflare request takes longer as it bypasses Cloudflare
-- **Optimization**: Subsequent requests use cached cookies and are much faster
+- **Expected**: The first request takes longer as it clears Cloudflare (a browser solve for nodriver, or a service round-trip for Unflare)
+- **Optimization**: Subsequent requests reuse the cached `cf_clearance` session and are much faster
 
 ### Getting Help
+- **nodriver Setup Issues**: See the [nodriver docs](https://github.com/ultrafunkamsterdam/nodriver) and [`docs/nodriver/README.md`](docs/nodriver/README.md)
 - **Unflare Setup Issues**: See [Unflare documentation](https://github.com/iamyegor/Unflare)
 - **Library Issues**: Open an issue on this repository
 ## Results
@@ -270,16 +345,23 @@ Pro Sports Transactions presents data in an HTML table. To make retrieval easy, 
 ## Runtime Dependencies
 - python >=3.11
 - aiohttp >=3.13.3,<4
-- pandas >=2.0.0,<3
+- pandas >=2.2.2,<4
 - brotli >=1.2.0,<2
 - lxml >=4.9.2,<7.0.0
 - html5lib >=1.1,<2
 - bs4 >=0.0.1,<0.0.2
 
+## Optional Dependencies (`nodriver` extra)
+Install with `pip install pro_sports_transactions[nodriver]` to use `NodriverRequestHandler`:
+- nodriver >=0.50,<1
+- opencv-python >=4.9,<5
+
+Also required, but not pip-installable: a real **Google Chrome** install, and a virtual display (e.g. `xvfb`) on headless hosts.
+
 ## Development Dependencies
-- pytest >=7.3.1,<8
-- pytest-asyncio >=0.21.0,<0.22
-- pytest-mock >=3.10.0,<4
+- pytest >=9.0,<10
+- pytest-asyncio >=1.3,<2
+- pytest-mock >=3.14,<4
 - ruff >=0.15.4
 
 &nbsp;
