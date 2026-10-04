@@ -4,6 +4,10 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Optional
 
+from ..cloudflare.challenge import CHALLENGE_MARKER, challenge_present
+
+# Re-exported: CHALLENGE_MARKER was defined here before moving to cloudflare/.
+__all__ = ["CHALLENGE_MARKER", "NodriverCredentialSource"]
 from ..cloudflare.credentials import Credentials
 from .browser_session import BrowserSession
 from .cookie_harvester import CookieHarvester
@@ -12,14 +16,6 @@ if TYPE_CHECKING:  # avoid a runtime import cycle through handlers/
     from .nodriver_config import NodriverConfig
 
 logger = logging.getLogger(__name__)
-
-# Marker that identifies a Cloudflare challenge interstitial. It must be
-# challenge-ONLY: the "challenge-platform" beacon script is injected into normal
-# protected pages too (unusable here), and the English "just a moment" title can
-# legitimately appear in real page content (false positives). The "_cf_chl"
-# challenge object (window._cf_chl_opt/_ctx) is set only on the interstitial and
-# is locale-independent.
-CHALLENGE_MARKER = "_cf_chl"
 
 
 class NodriverCredentialSource:
@@ -44,9 +40,7 @@ class NodriverCredentialSource:
     @staticmethod
     def challenge_present(html: str) -> bool:
         """True while the HTML is still a Cloudflare challenge interstitial."""
-        # The marker is a lowercase JS identifier, so no case-folding (which
-        # would copy the whole page on every poll) is needed.
-        return bool(html) and CHALLENGE_MARKER in html
+        return challenge_present(html)
 
     async def get_credentials(self, url: str) -> Optional[Credentials]:
         """Credentials for ``url``'s host, or ``None`` if the challenge could

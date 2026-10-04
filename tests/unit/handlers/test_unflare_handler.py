@@ -179,6 +179,101 @@ class TestUnflareHandler:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
+    async def test_get_does_not_refresh_on_a_site_failure(self):
+        """A failed replay that leaves the credentials cached (404, 5xx,
+        timeout) returns None instead of paying for an Unflare solve that would
+        hit the same failure."""
+        handler = UnflareRequestHandler(UnflareConfig())
+        handler.cache_credentials(
+            [{"name": "cf_clearance", "value": "abc", "expires": time.time() + 1000}],
+            {"User-Agent": "Chrome/154"},
+        )
+
+        with (
+            patch.object(
+                handler, "_try_cached_request", new_callable=AsyncMock
+            ) as mock_cached,
+            patch.object(
+                handler, "_refresh_cache_and_request", new_callable=AsyncMock
+            ) as mock_refresh,
+        ):
+            mock_cached.return_value = None
+
+            assert await handler.get("http://example.com", {}) is None
+
+        mock_refresh.assert_not_called()
+        assert handler.is_cache_valid()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_get_refreshes_when_credentials_are_rejected(self):
+        """A rejection clears the cache, so get() falls through to a fresh
+        Unflare solve."""
+        handler = UnflareRequestHandler(UnflareConfig())
+        handler.cache_credentials(
+            [{"name": "cf_clearance", "value": "abc", "expires": time.time() + 1000}],
+            {"User-Agent": "Chrome/154"},
+        )
+
+        async def rejected(_url, _headers):
+            handler.clear_cache()  # what a 403 does
+            return None
+
+        with (
+            patch.object(handler, "_try_cached_request", side_effect=rejected),
+            patch.object(
+                handler, "_refresh_cache_and_request", new_callable=AsyncMock
+            ) as mock_refresh,
+        ):
+            mock_refresh.return_value = "<html>Fresh</html>"
+
+            assert await handler.get("http://example.com", {}) == "<html>Fresh</html>"
+
+        mock_refresh.assert_awaited_once_with("http://example.com", {})
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "status, response_headers, body, cleared",
+        [
+            (403, {}, "body", True),
+            (503, {"cf-mitigated": "challenge"}, "body", True),
+            (503, {}, "<script>window._cf_chl_opt={}</script>", True),
+            (503, {}, "body", False),
+            (404, {}, "body", False),
+        ],
+    )
+    async def test_cached_request_clears_cache_only_on_rejection(
+        self, status, response_headers, body, cleared
+    ):
+        """A 403 or a Cloudflare challenge (cf-mitigated or the challenge
+        marker, any status) rejects the credentials; other failures leave them
+        cached."""
+        handler = UnflareRequestHandler(UnflareConfig())
+        handler.cache_credentials(
+            [{"name": "cf_clearance", "value": "abc", "expires": time.time() + 1000}],
+            {"User-Agent": "Chrome/154"},
+        )
+
+        mock_response = AsyncMock()
+        mock_response.status = status
+        mock_response.headers = response_headers
+        mock_response.text = AsyncMock(return_value=body)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            assert await handler._try_cached_request("http://example.com", {}) is None
+
+        assert handler.is_cache_valid() is not cleared
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_refresh_logs_non_200_unflare_response(self, caplog):
         """Test that non-200 from Unflare service is logged"""
         config = UnflareConfig()
@@ -228,6 +323,7 @@ class TestUnflareHandler:
         # Mock final response (failure)
         final_response = AsyncMock()
         final_response.status = 503
+        final_response.headers = {}
         final_response.text = AsyncMock(return_value="Service Unavailable")
         final_response.__aenter__ = AsyncMock(return_value=final_response)
         final_response.__aexit__ = AsyncMock(return_value=False)
@@ -268,6 +364,7 @@ class TestUnflareHandler:
 
         mock_response = AsyncMock()
         mock_response.status = 500
+        mock_response.headers = {}
         mock_response.text = AsyncMock(return_value="Internal Server Error")
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
         mock_response.__aexit__ = AsyncMock(return_value=False)

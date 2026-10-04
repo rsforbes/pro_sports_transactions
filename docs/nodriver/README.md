@@ -77,6 +77,11 @@ lowercase `user-agent` cannot ride along with the cached `User-Agent`.
   clear is not misreported as a failure.
 - Transient network errors on the cached replay retry a few times instead of
   escalating a blip into a full browser re-solve.
+- Only a rejection (a 403, or `cf-mitigated: challenge` on any status) triggers a
+  re-solve; the body's `_cf_chl` marker also counts, for a challenge served
+  without that header. Other replay failures (404, 5xx, timeout, network errors
+  that outlast the retries) return `None` and keep the cached session, since a
+  fresh solve would hit the same failure.
 
 Known rough edges / deferred:
 - On interpreter/loop shutdown nodriver can emit a benign "Event loop is closed"

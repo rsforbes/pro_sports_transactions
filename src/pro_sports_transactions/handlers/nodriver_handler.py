@@ -83,20 +83,19 @@ class NodriverRequestHandler(CachedCredentialHandler):
         result = await self._try_cached_request(url, headers)
         if result is not None or not solved_meanwhile:
             return result
+        if self._still_cached(replayed):
+            # Not rejected: the site failed, and a solve would not fix that.
+            return None
 
-        # The other caller's credentials failed for this request too, so solve
-        # for it, as before - unless a caller queued ahead of us already
-        # re-solved after the same failure. Callers that replayed in parallel
+        # Cloudflare rejected the other caller's credentials for this request
+        # too, so solve for it, as before - unless a caller queued ahead of us
+        # already re-solved after the same failure. Callers that replayed in parallel
         # and failed together must not each launch a browser solve in turn.
         # Either way this replays once more and returns, so it cannot loop.
         async with self.solve_lock.get():
             if not self._solved_since(replayed) and not await self._solve(url):
                 return None
         return await self._try_cached_request(url, headers)
-
-    def _solved_since(self, generation: Optional[int]) -> bool:
-        """Whether the cache holds valid credentials newer than ``generation``."""
-        return self.is_cache_valid() and self._cache_generation != generation
 
     async def _solve(self, url: str) -> bool:
         """Drive Chrome through the challenge and cache the credentials.

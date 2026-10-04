@@ -309,7 +309,7 @@ The handlers don't retry failed solves for you; retry policy is left to your app
 
 An empty result without `errors` means the search genuinely matched nothing. So always check `errors` before trusting an empty result.
 
-Occasional solve failures are expected (the Turnstile check doesn't pass every time), and a retry usually starts a fresh attempt: each new request after a failure makes the handler load the page again. A simple pattern:
+Occasional solve failures are expected (the Turnstile check doesn't pass every time), and a retry usually starts a fresh attempt: each new request after a failed solve makes the handler load the page again. A request that fails for a reason other than Cloudflare (a 404, a server error, a timeout, or a network error that persists through the handler's short retries) also returns `None`, but the handler keeps its cached session and doesn't solve again, since a fresh session would hit the same failure; a retry reuses the session. A simple pattern:
 
 ```python
 import asyncio
