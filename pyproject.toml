@@ -46,7 +46,7 @@ classifiers = [
   "Topic :: Software Development",
 ]
 dependencies = [
-  "aiohttp>=3.13.3,<4",
+  "aiohttp>=3.14.3,<4",
   # pandas floor is 2.2.2, not 2.0.0: pandas <2.2.2 was compiled against the
   # numpy 1.x C-ABI, so resolving the declared floor against numpy >=2 fails at
   # import with "ValueError: numpy.dtype size changed". 2.2.2 is the first
@@ -60,12 +60,24 @@ dependencies = [
   "bs4>=0.0.1,<0.0.2",
 ]
 
+[project.optional-dependencies]
+# In-process Cloudflare bypass via a real browser (NodriverRequestHandler).
+# Also requires a Chromium-based browser (not pip-installable; Google Chrome is
+# the tested, recommended choice) and, on a headless host, a virtual display
+# such as xvfb. opencv-python backs nodriver's verify_cf() Turnstile-checkbox
+# detection. See docs/nodriver/README.md.
+nodriver = [
+  "nodriver>=0.50,<1",
+  "opencv-python>=4.9,<5",
+]
+
 [project.urls]
 Repository = "https://github.com/rsforbes/pro_sports_transactions"
 Documentation = "https://github.com/rsforbes/pro_sports_transactions/blob/main/README.md"
 
 [dependency-groups]
 dev = [
+  "pre-commit>=4.6,<5",
   "pytest>=9.0,<10",
   "pytest-asyncio>=1.3,<2",
   "pytest-mock>=3.14,<4",
@@ -78,6 +90,21 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pro_sports_transactions"]
+
+# Hatchling's sdist default is every git-tracked file, which would ship editor,
+# dev container, CI, and tool config. Keep what's useful outside the repo: the
+# source, the tests (so downstream packagers can run them), and the docs and
+# examples the README links to. pyproject.toml is always included.
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/pro_sports_transactions",
+  "tests",
+  "docs",
+  "examples",
+  "README.md",
+  "CHANGELOG.md",
+  "LICENSE",
+]
 
 [tool.ruff]
 line-length = 88

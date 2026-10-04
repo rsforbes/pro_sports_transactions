@@ -83,6 +83,21 @@ class TestUnflareHandler:
         assert handler.is_cache_valid()
 
     @pytest.mark.unit
+    def test_cache_credentials_accepts_released_keyword_names(self):
+        """cache_credentials(cookies=..., unflare_headers=...) is the released
+        signature; moving the method into the shared base must not break it."""
+        handler = UnflareRequestHandler(UnflareConfig())
+
+        handler.cache_credentials(
+            cookies=[{"name": "cf_clearance", "value": "abc"}],
+            unflare_headers={"User-Agent": "Chrome/154"},
+        )
+
+        assert handler._cached_cookies == "cf_clearance=abc"
+        assert handler._cached_headers == {"User-Agent": "Chrome/154"}
+        assert handler.is_cache_valid()
+
+    @pytest.mark.unit
     def test_cache_credentials(self):
         """Test caching of cookies and headers"""
         config = UnflareConfig()
@@ -236,7 +251,7 @@ class TestUnflareHandler:
                 )
 
         assert result is None
-        assert "Final request failed with status 503" in caplog.text
+        assert "Cached-session request failed with status 503" in caplog.text
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -267,7 +282,7 @@ class TestUnflareHandler:
                 result = await handler._try_cached_request("http://example.com", {})
 
         assert result is None
-        assert "Cached request failed with status 500" in caplog.text
+        assert "Cached-session request failed with status 500" in caplog.text
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -343,3 +358,89 @@ class TestUnflareHandler:
             _, kwargs = final_call
             assert "headers" in kwargs
             assert kwargs["headers"]["Accept-Encoding"] == "gzip, deflate, br"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_cached_headers_override_caller_headers_case_insensitively(self):
+        """A lowercase caller "user-agent" must not survive alongside the cached
+        "User-Agent" - aiohttp would send both, and Cloudflare rejects a UA that
+        does not match the one cf_clearance was issued to."""
+        handler = UnflareRequestHandler(UnflareConfig())
+        handler.cache_credentials(
+            [{"name": "cf_clearance", "value": "abc"}],
+            {"User-Agent": "Chrome/154"},
+        )
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.text = AsyncMock(return_value="<html>OK</html>")
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("aiohttp.ClientSession", return_value=mock_session) as mock_cls:
+            await handler._try_cached_request(
+                "http://example.com",
+                {"user-agent": "Edge/112", "accept-encoding": "gzip", "referer": "r"},
+            )
+
+        sent = mock_cls.call_args.kwargs["headers"]
+        ua_keys = [k for k in sent if k.lower() == "user-agent"]
+        assert ua_keys == ["User-Agent"]
+        assert sent["User-Agent"] == "Chrome/154"
+        assert [k for k in sent if k.lower() == "accept-encoding"] == [
+            "Accept-Encoding"
+        ]
+        assert sent["Cookie"] == "cf_clearance=abc"
+        assert sent["referer"] == "r"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_fixed_overrides_replace_cached_headers_case_insensitively(self):
+        """Lowercase cached "accept-encoding"/"cookie" (e.g. from Unflare) must
+        not be sent alongside the fixed "Accept-Encoding"/"Cookie"."""
+        handler = UnflareRequestHandler(UnflareConfig())
+        handler.cache_credentials(
+            [{"name": "cf_clearance", "value": "abc"}],
+            {"user-agent": "Chrome/154", "accept-encoding": "gzip", "cookie": "x=1"},
+        )
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.text = AsyncMock(return_value="<html>OK</html>")
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("aiohttp.ClientSession", return_value=mock_session) as mock_cls:
+            await handler._try_cached_request(
+                "http://example.com", {"User-Agent": "Edge/112"}
+            )
+
+        sent = mock_cls.call_args.kwargs["headers"]
+        assert [k for k in sent if k.lower() == "user-agent"] == ["user-agent"]
+        assert sent["user-agent"] == "Chrome/154"
+        assert [k for k in sent if k.lower() == "accept-encoding"] == [
+            "Accept-Encoding"
+        ]
+        assert [k for k in sent if k.lower() == "cookie"] == ["Cookie"]
+        assert sent["Cookie"] == "cf_clearance=abc"
+
+    @pytest.mark.unit
+    def test_cache_credentials_tolerates_null_expires(self):
+        """A JSON null ``expires`` must fall back to the default lifetime rather
+        than raising TypeError out of get()."""
+        handler = UnflareRequestHandler(UnflareConfig())
+        handler.cache_credentials(
+            [{"name": "cf_clearance", "value": "abc", "expires": None}],
+            {"User-Agent": "Chrome/154"},
+        )
+        assert handler.is_cache_valid()
