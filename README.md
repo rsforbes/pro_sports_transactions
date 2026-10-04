@@ -23,7 +23,7 @@ Pro Sports Transactions is a Python API client-library for https://www.prosports
 
 **prosportstransactions.com is protected by a Cloudflare challenge, direct requests are typically blocked.** You'll need a Cloudflare-bypass request handler. Two are provided:
 
-- **`NodriverRequestHandler`** — solves the challenge **in-process** with a real browser (via [nodriver](https://github.com/ultrafunkamsterdam/nodriver)). Enable it with the `nodriver` extra: `pip install pro_sports_transactions[nodriver]`. The extra installs `nodriver` + `opencv-python` only — you also need a Chromium-based browser installed (nodriver uses an existing install; it does not download one). Google Chrome is the tested choice; others are untested (see [Supported browsers](#supported-browsers)). On a headless Linux host you also need a virtual display such as `xvfb`. Designed for Windows, macOS, and Linux (live-tested on Linux so far); see [Prerequisites](#prerequisites).
+- **`NodriverRequestHandler`** — solves the challenge **in-process** with a real browser (via [nodriver](https://github.com/ultrafunkamsterdam/nodriver)). Enable it with the `nodriver` extra: `pip install pro_sports_transactions[nodriver]`. The extra installs `nodriver` + `opencv-python-headless` only — you also need a Chromium-based browser installed (nodriver uses an existing install; it does not download one). Google Chrome is the tested choice; others are untested (see [Supported browsers](#supported-browsers)). On a headless Linux host you also need a virtual display such as `xvfb`. Designed for Windows, macOS, and Linux (live-tested on Linux so far); see [Prerequisites](#prerequisites).
 - **`UnflareRequestHandler`** — delegates [Unflare](https://github.com/iamyegor/Unflare), a sidecar (container), that you run alongside your app.
 
 Both perform the same underlying bypass (a real browser clears the challenge and hands back a `cf_clearance` session that is cached and replayed). Choose nodriver to avoid running a sidecar, or Unflare to keep the browser stack out of your application process. See [Choosing a handler](#choosing-a-handler).
@@ -38,7 +38,7 @@ Due to Cloudflare protection, you need a bypass handler. Pick one:
 
 Designed for **Windows, macOS, and Linux**. So far it has been live-tested on Linux only (desktop-less, under `xvfb`), so please open an issue if you hit trouble on Windows or macOS. pip installs the library and the extra, but you must provide the browser and, on headless Linux, a display yourself:
 
-1. **The library + extra** — `pip install pro_sports_transactions[nodriver]`. This installs `nodriver` and `opencv-python`. It does **not** install a browser.
+1. **The library + extra** — `pip install pro_sports_transactions[nodriver]`. This installs `nodriver` and `opencv-python-headless`. It does **not** install a browser.
 2. **A Chromium-based browser — Google Chrome recommended** — nodriver drives an existing browser install rather than downloading one. Google Chrome is the only browser tested so far; Edge, Brave, and others may work but are untested\* (see [Supported browsers](#supported-browsers)). If you already have Chrome, there's nothing to do; otherwise install it:
    - **Windows / macOS**: get Chrome from <https://www.google.com/chrome/> (default locations: `C:\Program Files\Google\Chrome\Application\chrome.exe`, `/Applications/Google Chrome.app`).
    - **Linux**: install the `google-chrome-stable` package.
@@ -381,7 +381,7 @@ uv run pytest tests/performance/handlers/test_unflare_performance.py::test_unfla
 - **Which browser launched?** Google Chrome is the only browser verified to clear the challenge; Playwright's bundled Chromium failed in testing. If Chromium is installed alongside Chrome, auto-detect may pick Chromium (it prefers the shortest path), so set `NodriverConfig(browser_executable_path=...)` to your Chrome binary. If you're using Edge, Brave, or another untested browser and it never clears, try Chrome. See [Supported browsers](#supported-browsers).
 - **Changed IP / VPN**: a cached session issued to one IP may be rejected from another; the handler then re-solves automatically, which costs another browser launch.
 - **Headless host**: run under a virtual display (`xvfb-run -a ...`); headless mode does not reliably solve the managed challenge.
-- **opencv can't load**: `verify_cf()` imports `opencv-python` (installed by the extra) to find the Turnstile checkbox. If it can't load, the checkbox is never clicked. On minimal Linux images it needs the system `libgl1` package. Check with `python -c "import cv2"`.
+- **opencv can't load**: `verify_cf()` imports `cv2` from `opencv-python-headless` (installed by the extra) to find the Turnstile checkbox. If it can't load, the checkbox is never clicked. Check with `python -c "import cv2"`. The OpenCV packages (`opencv-python`, `opencv-python-headless`, `opencv-contrib-python`, ...) all install the same `cv2` module and conflict with each other, so keep only one. If you installed an earlier release of the extra, it brought in `opencv-python`; `pip uninstall opencv-python opencv-python-headless` then `pip install --force-reinstall opencv-python-headless` leaves a single clean copy. If your project needs the GUI build for other reasons, keep `opencv-python` instead: it works with `verify_cf()` too.
 
 #### nodriver: `ImportError: NodriverRequestHandler requires the 'nodriver' extra...`
 - **Cause**: the `nodriver` package isn't installed. `NodriverRequestHandler()` checks at construction so the problem surfaces immediately rather than as an empty result.
@@ -499,7 +499,7 @@ Pro Sports Transactions presents data in an HTML table. To make retrieval easy, 
 ## Optional Dependencies (`nodriver` extra)
 Install with `pip install pro_sports_transactions[nodriver]` to use `NodriverRequestHandler`:
 - nodriver >=0.50,<1
-- opencv-python >=4.9,<5
+- opencv-python-headless >=4.9,<5
 
 Also required, but not pip-installable: a **Chromium-based browser** (Google Chrome is the tested, recommended choice; see [Supported browsers](#supported-browsers)), and a virtual display (e.g. `xvfb`) on headless hosts.
 
