@@ -111,3 +111,44 @@ chore(deps): bump aiohttp to 3.13.3
 
 A breaking change is marked with a `!` after the type/scope (e.g. `feat!:`) or a
 `BREAKING CHANGE:` footer.
+
+### How titles drive releases
+
+Releases are automated by
+[release-please](https://github.com/googleapis/release-please) (see
+[`release.yml`](.github/workflows/release.yml)), so the PR title also decides
+the next version and the changelog entry:
+
+| Title                                                              | Version bump | Changelog section        |
+| ------------------------------------------------------------------ | ------------ | ------------------------ |
+| `feat!:` / `BREAKING CHANGE:`                                      | major        | ⚠ BREAKING CHANGES       |
+| `feat:`                                                            | minor        | Features                 |
+| `fix:`                                                             | patch        | Bug Fixes                |
+| `perf:`                                                            | patch        | Performance Improvements |
+| `revert:`                                                          | patch        | Reverts                  |
+| `build:`, `chore:`, `ci:`, `docs:`, `refactor:`, `style:`, `test:` | none         | not listed               |
+
+The last row's types never trigger a release on their own. If a release is
+already pending, they're included in it but left out of the changelog. That
+includes `docs:`: documentation (and the README on PyPI) ships with the next
+code release (set in `changelog-sections` in `release-please-config.json`).
+
+Write the title (and description) as the changelog line a user should read.
+
+## Releasing
+
+There's no manual version bump, tag, or upload:
+
+1. Merge pull requests to `main` as usual. After each merge, release-please
+   opens or updates a **`chore(main): release X.Y.Z`** pull request that bumps
+   the version in `pyproject.toml` and `uv.lock` and prepends the new section to
+   `CHANGELOG.md`.
+2. When you're ready to release, review that PR (edit its changelog section or
+   description if needed; the description becomes the GitHub release notes)
+   and merge it. Edits are overwritten if anything else merges to `main` first.
+3. The merge tags `vX.Y.Z`, creates the GitHub release, publishes the sdist and
+   wheel to [PyPI](https://pypi.org/project/pro_sports_transactions/), and
+   attaches them to the GitHub release.
+
+To force a specific version, merge a commit to `main` whose body contains a
+`Release-As: X.Y.Z` footer.
