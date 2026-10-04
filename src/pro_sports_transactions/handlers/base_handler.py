@@ -221,3 +221,20 @@ class CachedCredentialHandler(RequestHandler):
         Useful for debugging and monitoring cache lifetime.
         """
         return self._cache_expiry
+
+    async def close(self):
+        """Release resources held by the handler. The base holds none (each request opens
+        and closes its own session); subclasses that own resources, such as a
+        browser, override this. Cached credentials are kept.
+
+        Every built-in handler supports ``close()`` and ``async with``, so
+        handlers can be swapped without changing the calling code. (Defined on
+        the concrete handlers rather than the abstract ``RequestHandler`` so
+        custom handlers' method resolution is unaffected.)
+        """
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        await self.close()

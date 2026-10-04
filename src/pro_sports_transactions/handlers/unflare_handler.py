@@ -27,9 +27,9 @@ class UnflareRequestHandler(CachedCredentialHandler):
     relies on :class:`CachedCredentialHandler` to cache and replay them.
     """
 
-    def __init__(self, config: UnflareConfig):
+    def __init__(self, config: Optional[UnflareConfig] = None):
         super().__init__()
-        self.config = config
+        self.config = config or UnflareConfig()
 
     def cache_credentials(self, cookies: List[dict], unflare_headers: dict):
         """Cache cookies and headers with expiration.
