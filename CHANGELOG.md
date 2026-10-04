@@ -8,12 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `NodriverRequestHandler`: in-process Cloudflare bypass that drives a real Chromium-based browser (Google Chrome tested) via [nodriver](https://github.com/ultrafunkamsterdam/nodriver), so no Unflare sidecar is needed. Opt-in via the `nodriver` extra (`pip install pro_sports_transactions[nodriver]`); see the README's Prerequisites, Supported browsers, and nodriver caveats sections and `examples/nodriver_search.py`
+- `CachedCredentialHandler`: shared base for handlers that obtain Cloudflare credentials once and replay them over plain HTTP; `UnflareRequestHandler` now builds on it
+- README guidance on handling failures and retrying in the caller (handlers do not retry failed solves)
+- README "New to async Python?" section for newcomers: the three async ideas the examples use, running them in Jupyter (`await` instead of `asyncio.run()`), and when `async with` is needed; plus a Troubleshooting entry for `asyncio.run() cannot be called from a running event loop`
+- All built-in handlers (`DirectRequestHandler`, `UnflareRequestHandler`, `NodriverRequestHandler`) support `async with` and `close()`, and construct with no arguments, so switching handlers is a one-line change. `UnflareRequestHandler`'s `config` is now optional (defaults to `UnflareConfig()`). The abstract `RequestHandler` is unchanged, so custom handlers are unaffected
 - CI workflow running the unit test suite across Python 3.11–3.14 on every pull request
 - Python version Trove classifiers (3.11–3.14) advertising the supported release range
 - Dev container persists Claude Code history and memory across rebuilds (named volume on `~/.claude`) and installs the GitHub CLI via the `github-cli` dev container feature
 - Dependabot configuration for weekly uv and GitHub Actions dependency updates (minor/patch bumps grouped, Conventional-Commit PR titles)
 
 ### Changed
+- `UnflareRequestHandler` cache lifetime now follows the `cf_clearance` cookie's expiry (minus 5 minutes) instead of being capped at 1 hour. Cached credentials are replayed until Cloudflare rejects them (403), which triggers a fresh Unflare solve, so far fewer Unflare calls are made
+- Cached-credential requests retry transient network errors up to 3 times with a short backoff (timeouts are not retried); previously a single attempt
+- The request made immediately after an Unflare solve now goes through the same cached-request path, so a 403 there also clears the cache, and the Unflare connection is closed before that request is made
+- `is_cache_valid()` (Unflare and nodriver) no longer requires cookies: credentials that cleared Cloudflare without setting any cookies are now cached (1-hour default lifetime) instead of being re-solved on every request; `has_cached_cookies` still reports whether cookies are cached
+- Handler log messages for cached-credential requests were reworded (e.g. "Requesting with session credentials", "Session credentials rejected (403)")
 - Migrated the project toolchain from Poetry to [uv](https://docs.astral.sh/uv/) (`uv.lock` replaces `poetry.lock`; build backend is now hatchling)
 - Replaced black, flake8, isort, and pylint with [Ruff](https://docs.astral.sh/ruff/) for formatting and linting
 - Raised the pandas floor to `>=2.2.2` (the first release with numpy 2 support) so the declared minimum resolves against modern numpy; a `--resolution lowest-direct` CI leg now guards it
@@ -22,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Raised the pandas ceiling to `<4` to allow pandas 3.x; the suite passes at both the `2.2.2` floor and `3.0.3`
 
 ### Fixed
+- `Search` raised `lxml.etree.XMLSyntaxError` when a request handler returned no response (e.g. Cloudflare wasn't cleared), instead of returning an empty result with `errors` set. A regression from wrapping the HTML in `StringIO` for pandas 3: `StringIO(None)` silently becomes an empty document. `get_dataframe()`, `get_dict()`, and `get_json()` now report `ValueError('No response from the request handler')` in `errors`; a non-empty response lxml can't parse (e.g. only a comment) is likewise reported in `errors` instead of raising ([#44](https://github.com/rsforbes/pro_sports_transactions/issues/44))
+- Cached-credential requests merged caller headers and cached headers case-sensitively, so a lowercase `user-agent` from the caller could be sent alongside the cached `User-Agent`, and Cloudflare rejects the mismatched session with 403. Headers are now merged case-insensitively (affects `UnflareRequestHandler` whenever the service returns a `User-Agent` key in a different case than the caller's)
+- `UnflareRequestHandler` no longer raises `TypeError` when the service returns a cookie with `"expires": null`
+- A 403 on a cached-credential request no longer clears credentials that a concurrent refresh stored while the request was in flight
+- `examples/unflare_search.py` linked to a nonexistent Unflare repository; it now points to <https://github.com/iamyegor/Unflare>
 - `Search` and `UrlBuilder.build` now resolve their default `start_date`/`end_date` at call time instead of freezing `date.today()` at import time, so a long-lived process no longer defaults to its import-day date ([#27](https://github.com/rsforbes/pro_sports_transactions/issues/27))
 - Unit tests resolve their HTML response fixtures relative to the test file instead of a hardcoded absolute path, so the suite runs outside the original dev container (e.g. in CI)
 - Dev container now mounts the repo at `/workspace` (via `workspaceFolder`/`workspaceMount`) to match the Dockerfile's `WORKDIR` and `UV_PROJECT_ENVIRONMENT`, so `uv sync` in post-create no longer fails with `Permission denied` creating `/workspace/.venv` on a clean rebuild

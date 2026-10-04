@@ -13,10 +13,11 @@ echo "Setting up development environment..."
 # root-owned on first creation, so hand ownership to the vscode user.
 sudo chown -R vscode:vscode /home/vscode/.claude 2>/dev/null || true
 
-# Install all dependencies (including the dev group) from pyproject.toml and
-# uv.lock into ./.venv. --frozen fails loudly if the lock is out of sync rather
-# than silently re-resolving, so the container matches CI exactly.
-uv sync --frozen
+# Install all dependencies (including the dev group and optional extras such as
+# [nodriver]) from pyproject.toml and uv.lock into ./.venv. --frozen fails
+# loudly if the lock is out of sync rather than silently re-resolving, so the
+# container matches CI exactly.
+uv sync --frozen --all-extras
 
 # Configure shell activation for all future terminal sessions so the project's
 # .venv is active in every new terminal. Guarded so a missing venv is not fatal.
