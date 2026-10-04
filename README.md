@@ -89,7 +89,8 @@ Both cache the `cf_clearance` session after the first solve and replay cheap HTT
 All handlers are used the same way, so switching is a one-line change:
 
 ```python
-async with NodriverRequestHandler() as handler:   # or UnflareRequestHandler(), DirectRequestHandler()
+# or UnflareRequestHandler(), DirectRequestHandler()
+async with NodriverRequestHandler() as handler:
     df = await pst.Search(..., request_handler=handler).get_dataframe()
 ```
 
@@ -126,7 +127,8 @@ RuntimeError: asyncio.run() cannot be called from a running event loop
 Instead, `await` the function directly in a cell:
 
 ```python
-df = await search_transactions()   # in a notebook cell, instead of asyncio.run(search_transactions())
+# In a notebook cell, instead of asyncio.run(search_transactions()):
+df = await search_transactions()
 ```
 
 ### Do I have to use `async with`?
@@ -157,6 +159,7 @@ from pro_sports_transactions.handlers import NodriverRequestHandler, NodriverCon
 # to point at a specific browser. On a headless host, run under xvfb (see Prerequisites).
 config = NodriverConfig()
 
+
 async def search_transactions():
     async with NodriverRequestHandler(config) as handler:  # closes the browser on exit
         return await pst.Search(
@@ -168,6 +171,7 @@ async def search_transactions():
             team="Lakers",
             request_handler=handler,  # IMPORTANT: use the bypass handler
         ).get_dataframe()  # Also supports get_dict() and get_json()
+
 
 if __name__ == "__main__":
     df = asyncio.run(search_transactions())
@@ -198,9 +202,11 @@ end_date = date.fromisoformat("2023-04-09")
 # Pagination: Pro Sports Transactions provides 25 rows per page
 starting_row = 0
 
+
 # Define the coroutine for searching transactions
 async def search_transactions():
-    async with UnflareRequestHandler(config) as handler:  # same pattern as every handler
+    # Same pattern as every handler
+    async with UnflareRequestHandler(config) as handler:
         return await pst.Search(
             league=league,
             transaction_types=transaction_types,
@@ -212,6 +218,7 @@ async def search_transactions():
             request_handler=handler,  # IMPORTANT: use the bypass handler
         ).get_dataframe()  # Also supports get_dict() and get_json()
 
+
 # Example execution block
 if __name__ == "__main__":
     df = asyncio.run(search_transactions())
@@ -221,6 +228,7 @@ if __name__ == "__main__":
 ```python
 # Passing no request_handler issues a direct request (the default). Direct
 # requests are typically blocked by Cloudflare — shown here for completeness.
+
 
 async def search_transactions_direct():
     return await pst.Search(
@@ -244,9 +252,9 @@ from pro_sports_transactions.handlers import NodriverRequestHandler, NodriverCon
 #   pip install pro_sports_transactions[nodriver]
 config = NodriverConfig(
     browser_executable_path=None,  # None = auto-detect Chrome/Chromium; or set an explicit path
-    headless=False,                # keep False; use xvfb on headless hosts
-    verify_attempts=8,             # max Turnstile solve attempts
-    solve_timeout=120.0,           # give up on one browser solve after this many seconds
+    headless=False,  # keep False; use xvfb on headless hosts
+    verify_attempts=8,  # max Turnstile solve attempts
+    solve_timeout=120.0,  # give up on one browser solve after this many seconds
 )
 handler = NodriverRequestHandler(config)
 
@@ -261,7 +269,7 @@ search = pst.Search(
 print(f"Cache valid: {handler.is_cache_valid()}")
 
 # Reuse one handler across many requests to keep the browser warm, then close it:
-await handler.close()   # or use `async with handler:` as a context manager
+await handler.close()  # or use `async with handler:` as a context manager
 ```
 
 #### Unflare Handler (Cloudflare Bypass via Service)
@@ -273,14 +281,14 @@ from pro_sports_transactions.handlers import UnflareRequestHandler, UnflareConfi
 config = UnflareConfig(
     url="http://localhost:5002/scrape",  # Your Unflare service URL
     timeout=60000,  # Request timeout in milliseconds
-    proxy={"host": "proxy.example.com", "port": 8080}  # Optional proxy
+    proxy={"host": "proxy.example.com", "port": 8080},  # Optional proxy
 )
 
 handler = UnflareRequestHandler(config)
 search = pst.Search(
     league=pst.League.NBA,
     transaction_types=(pst.TransactionType.Movement,),
-    request_handler=handler
+    request_handler=handler,
 )
 
 # The handler automatically caches cookies for improved performance
@@ -306,14 +314,16 @@ Occasional solve failures are expected (the Turnstile check doesn't pass every t
 ```python
 import asyncio
 
+
 async def get_dataframe_with_retry(search, attempts=3):
     for attempt in range(attempts):
         df = await search.get_dataframe()
         if "errors" not in df.attrs:
             return df
         if attempt + 1 < attempts:
-            await asyncio.sleep(2 ** attempt)  # back off: 1s, 2s, ...
+            await asyncio.sleep(2**attempt)  # back off: 1s, 2s, ...
     return df  # still failing; inspect df.attrs["errors"]
+
 
 async with NodriverRequestHandler() as handler:
     search = pst.Search(..., request_handler=handler)
@@ -330,7 +340,7 @@ Notes:
 
 The library includes built-in performance testing capabilities with configurable thresholds:
 
-```python
+```toml
 # Configure performance thresholds in pyproject.toml
 [tool.performance-thresholds]
 unflare_cache_hit_speedup = 10.0  # Cache hits should be 10x faster than misses
