@@ -203,14 +203,25 @@ class TestNodriverRequestHandler:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_solves_when_credentials_solved_meanwhile_fail(self):
-        """If another caller's fresh credentials fail for this request, solve
-        for it rather than returning None."""
+        """If Cloudflare rejects another caller's fresh credentials for this
+        request, solve for it rather than returning None."""
         handler, source, replay = make_handler()
-        replay.side_effect = [None, "<html>after solve</html>"]
+
+        async def rejected_then_ok(_url, _headers):
+            if replay.await_count == 1:
+                handler.clear_cache()  # what a 403 does
+                return None
+            return "<html>after solve</html>"
+
+        replay.side_effect = rejected_then_ok
 
         class SolvedWhileWaiting:
+            entered = False
+
             async def __aenter__(self):
-                if not handler.is_cache_valid():
+                # Only the first wait sees another caller's solve.
+                if not SolvedWhileWaiting.entered:
+                    SolvedWhileWaiting.entered = True
                     handler.cache_credentials(
                         [{"name": "cf_clearance", "value": "tok"}],
                         {"User-Agent": "Chrome/136"},
@@ -228,6 +239,47 @@ class TestNodriverRequestHandler:
         )
         source.get_credentials.assert_awaited_once()
         assert replay.await_count == 2
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_no_solve_when_credentials_solved_meanwhile_hit_a_site_failure(
+        self,
+    ):
+        """A non-rejection failure (404, 5xx, timeout) leaves the credentials
+        cached; a browser solve would hit the same failure, so return None."""
+        handler, source, replay = make_handler(replay=None)
+
+        class SolvedWhileWaiting:
+            async def __aenter__(self):
+                handler.cache_credentials(
+                    [{"name": "cf_clearance", "value": "tok"}],
+                    {"User-Agent": "Chrome/136"},
+                )
+
+            async def __aexit__(self, *exc):
+                return False
+
+        handler.solve_lock = MagicMock()
+        handler.solve_lock.get = MagicMock(return_value=SolvedWhileWaiting())
+
+        assert await handler._refresh_cache_and_request(URL, {}) is None
+        source.get_credentials.assert_not_called()
+        replay.assert_awaited_once()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_get_does_not_solve_on_a_site_failure(self):
+        """End to end through get(): a failed replay of valid credentials that
+        were not rejected must not launch the browser."""
+        handler, source, replay = make_handler(replay=None)
+        handler.cache_credentials(
+            [{"name": "cf_clearance", "value": "tok", "expires": time.time() + 1000}],
+            {"User-Agent": "Chrome/136"},
+        )
+
+        assert await handler.get(URL, {}) is None
+        source.get_credentials.assert_not_called()
+        replay.assert_awaited_once()
 
     @pytest.mark.unit
     @pytest.mark.asyncio

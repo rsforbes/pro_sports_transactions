@@ -9,6 +9,8 @@ from typing import Dict, List, Optional
 
 import aiohttp
 
+from ..cloudflare.challenge import challenge_present
+
 logger = logging.getLogger(__name__)
 
 # The cookie that actually gates Cloudflare access; cache validity is anchored
@@ -56,12 +58,31 @@ class CachedCredentialHandler(RequestHandler):
     async def get(self, url: str, headers: Dict[str, str]) -> Optional[str]:
         # Fast path: replay cached credentials if they are still valid.
         if self.is_cache_valid():
+            generation = self._cache_generation
             result = await self._try_cached_request(url, headers)
             if result is not None:
                 return result
+            if self._still_cached(generation):
+                # The site failed (404, 5xx, timeout), not the credentials:
+                # fresh ones would hit the same failure, so leave retrying to
+                # the caller rather than paying for a solve.
+                return None
 
         # Cache miss, expired, or the cached credentials were rejected.
         return await self._refresh_cache_and_request(url, headers)
+
+    def _still_cached(self, generation: int) -> bool:
+        """Whether the credentials of ``generation`` are still cached and valid.
+
+        A rejection clears the credentials it was sent with (see
+        ``_try_cached_request``), so after a failed replay this means the
+        failure was not Cloudflare rejecting them.
+        """
+        return self.is_cache_valid() and self._cache_generation == generation
+
+    def _solved_since(self, generation: Optional[int]) -> bool:
+        """Whether the cache holds valid credentials newer than ``generation``."""
+        return self.is_cache_valid() and self._cache_generation != generation
 
     @abstractmethod
     async def _refresh_cache_and_request(
@@ -90,9 +111,10 @@ class CachedCredentialHandler(RequestHandler):
 
         Shared by the cached fast path and each handler's immediate post-solve
         request, so the log wording is neutral rather than cache-specific. A
-        403 means the credentials are stale (clear and give up); a transient
-        network error is retried a few times so a blip does not trigger an
-        expensive fresh refresh.
+        403 or a Cloudflare challenge means the credentials are stale (clear
+        and give up); a transient network error is retried a few times so a
+        blip does not trigger an expensive fresh refresh. Other failures leave
+        the cache alone.
         """
         logger.info("Requesting with session credentials")
         # Snapshot the credentials this request uses, so a 403 only clears the
@@ -127,9 +149,21 @@ class CachedCredentialHandler(RequestHandler):
                     async with session.get(url) as response:
                         if response.status == 200:
                             return await response.text(encoding="utf-8")
-                        if response.status == 403:
+                        # errors="replace": a non-UTF-8 error body must not
+                        # raise UnicodeDecodeError out of the check or the log.
+                        body = await response.text(errors="replace")
+                        # Cloudflare marks challenges with cf-mitigated whatever
+                        # the status (e.g. a 503 "under attack" interstitial);
+                        # the body marker catches a challenge served without
+                        # it, which would otherwise never trigger a re-solve.
+                        challenged = response.headers.get(
+                            "cf-mitigated", ""
+                        ).lower() == "challenge" or challenge_present(body)
+                        if response.status == 403 or challenged:
                             # Cloudflare rejected the session - credentials stale
-                            logger.warning("Session credentials rejected (403)")
+                            logger.warning(
+                                "Session credentials rejected (%d)", response.status
+                            )
                             if self._cache_generation == sent_generation:
                                 self.clear_cache()
                             return None
@@ -139,9 +173,7 @@ class CachedCredentialHandler(RequestHandler):
                         logger.warning(
                             "Cached-session request failed with status %d: %s",
                             response.status,
-                            # errors="replace": a non-UTF-8 error body must not
-                            # raise UnicodeDecodeError out of the log call.
-                            await response.text(errors="replace"),
+                            body,
                         )
                         return None
             except asyncio.TimeoutError as e:
