@@ -173,9 +173,9 @@ uv run pytest tests/performance/handlers/test_unflare_performance.py::test_unfla
   2. Start the Unflare service (usually `http://localhost:5002`)
   3. Verify the service is accessible: `curl http://localhost:5002/health` (if available)
 
-#### "TypeError: cannot parse from 'NoneType'" errors
-- **Cause**: Direct requests being blocked by Cloudflare
-- **Solution**: Use `UnflareRequestHandler` instead of default direct requests
+#### Empty results with `errors: ["ValueError('No response from the request handler')"]`
+- **Cause**: The request handler couldn't fetch the page: direct requests blocked by Cloudflare, or the Unflare service failed or couldn't clear the challenge
+- **Solution**: Use `UnflareRequestHandler` instead of default direct requests. If you already do, check that the Unflare service is running, and retry: an occasional failed solve is normal
 
 #### Slow performance on first request
 - **Expected**: First Unflare request takes longer as it bypasses Cloudflare

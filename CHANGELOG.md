@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Raised the pandas ceiling to `<4` to allow pandas 3.x; the suite passes at both the `2.2.2` floor and `3.0.3`
 
 ### Fixed
+- `Search` raised `lxml.etree.XMLSyntaxError` when a request handler returned no response (e.g. Cloudflare wasn't cleared), instead of returning an empty result with `errors` set. A regression from wrapping the HTML in `StringIO` for pandas 3: `StringIO(None)` silently becomes an empty document. `get_dataframe()`, `get_dict()`, and `get_json()` now report `ValueError('No response from the request handler')` in `errors`; a non-empty response lxml can't parse (e.g. only a comment) is likewise reported in `errors` instead of raising ([#44](https://github.com/rsforbes/pro_sports_transactions/issues/44))
 - `Search` and `UrlBuilder.build` now resolve their default `start_date`/`end_date` at call time instead of freezing `date.today()` at import time, so a long-lived process no longer defaults to its import-day date ([#27](https://github.com/rsforbes/pro_sports_transactions/issues/27))
 - Unit tests resolve their HTML response fixtures relative to the test file instead of a hardcoded absolute path, so the suite runs outside the original dev container (e.g. in CI)
 - Dev container now mounts the repo at `/workspace` (via `workspaceFolder`/`workspaceMount`) to match the Dockerfile's `WORKDIR` and `UV_PROJECT_ENVIRONMENT`, so `uv sync` in post-create no longer fails with `Permission denied` creating `/workspace/.venv` on a clean rebuild

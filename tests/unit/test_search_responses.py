@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 import pro_sports_transactions as pst
+from pro_sports_transactions.handlers import RequestHandler
 from pro_sports_transactions.search import TransactionType
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -111,3 +112,69 @@ async def test_empty_response(empty_response_mock):
     )
 
     assert expected == actual
+
+
+class _StubHandler(RequestHandler):
+    """A request handler that returns a fixed response."""
+
+    def __init__(self, response):
+        self.response = response
+
+    async def get(self, url, headers):
+        return self.response
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response", [None, "", "  \n"], ids=["none", "empty", "blank"])
+async def test_no_response_from_handler_reports_error(response):
+    """A handler that couldn't fetch the page (e.g. Cloudflare not cleared)
+    returns None. Search must report that via errors, not raise (#44)."""
+    search = pst.Search(
+        league=pst.League.NBA,
+        transaction_types=(TransactionType.Movement,),
+        request_handler=_StubHandler(response),
+    )
+
+    df = await search.get_dataframe()
+
+    assert df.empty
+    assert list(df.columns) == ["Date", "Team", "Acquired", "Relinquished", "Notes"]
+    assert df.attrs["pages"] == 0
+    assert df.attrs["errors"] == ("ValueError('No response from the request handler')",)
+    assert (await search.get_dict())["errors"] == df.attrs["errors"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_no_response_from_default_handler_reports_error(create_mock_coro):
+    """The default (Http.get) path returns None when direct requests are
+    blocked by Cloudflare. Search must report that via errors, not raise (#44)."""
+    mock, _ = create_mock_coro(to_patch="pro_sports_transactions.search.Http.get")
+    mock.return_value = None
+
+    df = await pst.Search(
+        league=pst.League.NBA, transaction_types=(TransactionType.Movement,)
+    ).get_dataframe()
+
+    assert df.empty
+    assert df.attrs["errors"] == ("ValueError('No response from the request handler')",)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response", ["<!-- -->", '<?xml version="1.0"?>'], ids=["comment", "xml-decl"]
+)
+async def test_unparseable_response_reports_error(response):
+    """A non-empty document with no parseable text makes lxml raise
+    XMLSyntaxError; Search must report it via errors, not raise."""
+    df = await pst.Search(
+        league=pst.League.NBA,
+        transaction_types=(TransactionType.Movement,),
+        request_handler=_StubHandler(response),
+    ).get_dataframe()
+
+    assert df.empty
+    assert df.attrs["pages"] == 0
+    assert df.attrs["errors"][0].startswith("XMLSyntaxError(")

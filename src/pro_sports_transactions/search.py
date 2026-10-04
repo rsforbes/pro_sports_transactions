@@ -13,6 +13,7 @@ from typing import Dict, Optional
 from urllib import parse
 
 import pandas as pd
+from lxml import etree
 from pandas import DataFrame, read_html
 
 from .handlers import DirectRequestHandler, RequestHandler
@@ -98,6 +99,12 @@ class Search:
 
         df = None
         try:
+            # A handler returns None when it couldn't fetch the page (e.g. the
+            # Cloudflare challenge wasn't cleared). Report it with a clear
+            # message: StringIO(None) silently becomes an empty document, which
+            # read_html would only report as an opaque lxml parse error (#44).
+            if not response or response.isspace():
+                raise ValueError("No response from the request handler")
             # Wrap the HTML in StringIO: pandas 3.0 dropped read_html's implicit
             # acceptance of a literal HTML string (it now treats a bare str as a
             # path/URL). StringIO is also accepted by pandas 2.2.x, so this works
@@ -108,7 +115,15 @@ class Search:
                 columns=["Date", "Team", "Acquired", "Relinquished", "Notes"],
             )
             df.attrs["pages"] = int(df_list[1].columns[2].split(" ")[-1])
-        except (ValueError, IndexError, AttributeError, TypeError) as e:
+        # etree.LxmlError: lxml raises XMLSyntaxError (not a ValueError) for a
+        # non-empty document with no parseable text, e.g. only a comment.
+        except (
+            ValueError,
+            IndexError,
+            AttributeError,
+            TypeError,
+            etree.LxmlError,
+        ) as e:
             df = pd.DataFrame(
                 columns=["Date", "Team", "Acquired", "Relinquished", "Notes"]
             )
