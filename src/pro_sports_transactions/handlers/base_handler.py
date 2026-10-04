@@ -73,11 +73,11 @@ class CachedCredentialHandler(RequestHandler):
         Returns:
             True if cache is valid and not expired, False otherwise
         """
-        return (
-            self._cached_cookies is not None
-            and self._cached_headers is not None
-            and time.time() < self._cache_expiry
-        )
+        # Cookies are not required: a solve that cleared without a challenge
+        # may yield none, and a cookie-less replay that succeeded is still a
+        # valid session. Requiring them made every request re-solve and let
+        # concurrent waiters each solve instead of reusing the fresh cache.
+        return self._cached_headers is not None and time.time() < self._cache_expiry
 
     async def _try_cached_request(
         self, url: str, headers: Dict[str, str]
@@ -91,10 +91,26 @@ class CachedCredentialHandler(RequestHandler):
         expensive fresh refresh.
         """
         logger.info("Requesting with session credentials")
-        final_headers = {**headers, **self._cached_headers}
-        final_headers["Accept-Encoding"] = "gzip, deflate, br"
+        # Snapshot the credentials this request uses, so a 403 only clears the
+        # cache if it still holds these same (stale) credentials - not fresh ones
+        # a concurrent refresh stored while this request was in flight.
+        sent_cookies = self._cached_cookies
+        fixed = {"Accept-Encoding": "gzip, deflate, br"}
         if self._cached_cookies:
-            final_headers["Cookie"] = self._cached_cookies
+            fixed["Cookie"] = self._cached_cookies
+        # Merge case-insensitively, later layers winning: callers pass lowercase
+        # keys (e.g. the search module's "user-agent"), and a plain dict merge
+        # would keep both it and the cached "User-Agent", sending two UA headers.
+        # cf_clearance is bound to the solving browser's UA, so Cloudflare then
+        # rejects with 403. The same applies between the cached headers (e.g. an
+        # Unflare "accept-encoding"/"cookie") and the fixed overrides.
+        final_headers: Dict[str, str] = {}
+        for layer in (headers, self._cached_headers, fixed):
+            layer_keys = {k.lower() for k in layer}
+            final_headers = {
+                k: v for k, v in final_headers.items() if k.lower() not in layer_keys
+            }
+            final_headers.update(layer)
 
         timeout = aiohttp.ClientTimeout(total=120)
         for attempt in range(_REPLAY_ATTEMPTS):
@@ -108,7 +124,8 @@ class CachedCredentialHandler(RequestHandler):
                         if response.status == 403:
                             # Cloudflare rejected the session - credentials stale
                             logger.warning("Session credentials rejected (403)")
-                            self.clear_cache()
+                            if self._cached_cookies == sent_cookies:
+                                self.clear_cache()
                             return None
                         logger.warning(
                             "Credentialed request failed with status %d: %s",
@@ -116,6 +133,11 @@ class CachedCredentialHandler(RequestHandler):
                             await response.text(),
                         )
                         return None
+            except asyncio.TimeoutError as e:
+                # The full 120s budget is already spent; retrying would stall
+                # the caller for minutes before the refresh path even starts.
+                logger.error("Credentialed request timed out: %s", e)
+                return None
             except (aiohttp.ClientError, OSError) as e:
                 # Transient: retry before escalating to a full refresh.
                 if attempt + 1 < _REPLAY_ATTEMPTS:
@@ -160,12 +182,12 @@ class CachedCredentialHandler(RequestHandler):
             (
                 c["expires"]
                 for c in cookies
-                if c.get("name") == _SESSION_COOKIE and c.get("expires", 0) > 0
+                if c.get("name") == _SESSION_COOKIE and (c.get("expires") or 0) > 0
             ),
             None,
         )
         if anchor is None:
-            positive = [c["expires"] for c in cookies if c.get("expires", 0) > 0]
+            positive = [c["expires"] for c in cookies if (c.get("expires") or 0) > 0]
             anchor = min(positive) if positive else time.time() + 3600
 
         # Refresh 5 minutes early; an already-expired anchor yields a past

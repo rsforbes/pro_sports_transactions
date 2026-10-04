@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import aiohttp
 
@@ -30,6 +30,19 @@ class UnflareRequestHandler(CachedCredentialHandler):
     def __init__(self, config: UnflareConfig):
         super().__init__()
         self.config = config
+
+    def cache_credentials(self, cookies: List[dict], unflare_headers: dict):
+        """Cache cookies and headers with expiration.
+
+        Args:
+            cookies: List of cookie dictionaries from Unflare response
+            unflare_headers: Headers dictionary from Unflare response
+
+        Useful for manually managing cache or pre-warming credentials.
+        """
+        # Keeps the released keyword name (``unflare_headers``); the shared base
+        # calls it ``response_headers``.
+        super().cache_credentials(cookies, unflare_headers)
 
     async def _refresh_cache_and_request(
         self, url: str, headers: Dict[str, str]
@@ -68,12 +81,14 @@ class UnflareRequestHandler(CachedCredentialHandler):
 
                     cookies = result.get("cookies", [])
                     unflare_headers = result.get("headers", {})
-
-                    # Cache the cookies and headers, then fulfil the request via
-                    # the shared replay path (single source of truth for header
-                    # merging, Accept-Encoding, and 403 -> cache-clear handling).
-                    self.cache_credentials(cookies, unflare_headers)
-                    return await self._try_cached_request(url, headers)
         except (aiohttp.ClientError, OSError) as e:
             logger.error("Unflare request failed: %s", e)
             return None
+
+        # Cache the cookies and headers, then fulfil the request via the shared
+        # replay path (single source of truth for header merging,
+        # Accept-Encoding, and 403 -> cache-clear handling). Done after the
+        # Unflare session closes so its connection is not held open across the
+        # replay and its retries.
+        self.cache_credentials(cookies, unflare_headers)
+        return await self._try_cached_request(url, headers)
