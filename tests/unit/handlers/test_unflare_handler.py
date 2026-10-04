@@ -138,18 +138,26 @@ class TestUnflareHandler:
         config = UnflareConfig()
         handler = UnflareRequestHandler(config)
 
-        # Mock the refresh_cache_and_request method
-        with patch.object(
-            handler, "_refresh_cache_and_request", new_callable=AsyncMock
-        ) as mock_refresh:
-            mock_refresh.return_value = "<html>Fresh Response</html>"
+        async def solve(_url):
+            handler.cache_credentials(
+                [{"name": "cf_clearance", "value": "abc"}],
+                {"User-Agent": "Chrome/154"},
+            )
+            return True
+
+        with (
+            patch.object(handler, "_solve", side_effect=solve) as mock_solve,
+            patch.object(
+                handler, "_try_cached_request", new_callable=AsyncMock
+            ) as mock_replay,
+        ):
+            mock_replay.return_value = "<html>Fresh Response</html>"
 
             result = await handler.get("http://example.com", {"test": "header"})
 
-            assert result == "<html>Fresh Response</html>"
-            mock_refresh.assert_called_once_with(
-                "http://example.com", {"test": "header"}
-            )
+        assert result == "<html>Fresh Response</html>"
+        mock_solve.assert_awaited_once_with("http://example.com")
+        mock_replay.assert_awaited_once_with("http://example.com", {"test": "header"})
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -193,15 +201,13 @@ class TestUnflareHandler:
             patch.object(
                 handler, "_try_cached_request", new_callable=AsyncMock
             ) as mock_cached,
-            patch.object(
-                handler, "_refresh_cache_and_request", new_callable=AsyncMock
-            ) as mock_refresh,
+            patch.object(handler, "_solve", new_callable=AsyncMock) as mock_solve,
         ):
             mock_cached.return_value = None
 
             assert await handler.get("http://example.com", {}) is None
 
-        mock_refresh.assert_not_called()
+        mock_solve.assert_not_called()
         assert handler.is_cache_valid()
 
     @pytest.mark.unit
@@ -215,21 +221,26 @@ class TestUnflareHandler:
             {"User-Agent": "Chrome/154"},
         )
 
-        async def rejected(_url, _headers):
-            handler.clear_cache()  # what a 403 does
-            return None
+        async def replay(_url, _headers):
+            if handler._cached_cookies == "cf_clearance=abc":
+                handler.clear_cache()  # what a 403 does
+                return None
+            return "<html>Fresh</html>"
+
+        async def solve(_url):
+            handler.cache_credentials(
+                [{"name": "cf_clearance", "value": "new"}],
+                {"User-Agent": "Chrome/154"},
+            )
+            return True
 
         with (
-            patch.object(handler, "_try_cached_request", side_effect=rejected),
-            patch.object(
-                handler, "_refresh_cache_and_request", new_callable=AsyncMock
-            ) as mock_refresh,
+            patch.object(handler, "_try_cached_request", side_effect=replay),
+            patch.object(handler, "_solve", side_effect=solve) as mock_solve,
         ):
-            mock_refresh.return_value = "<html>Fresh</html>"
-
             assert await handler.get("http://example.com", {}) == "<html>Fresh</html>"
 
-        mock_refresh.assert_awaited_once_with("http://example.com", {})
+        mock_solve.assert_awaited_once_with("http://example.com")
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -292,9 +303,7 @@ class TestUnflareHandler:
 
         with patch("aiohttp.ClientSession", return_value=mock_session):
             with caplog.at_level(logging.WARNING):
-                result = await handler._refresh_cache_and_request(
-                    "http://example.com", {}
-                )
+                result = await handler.get("http://example.com", {})
 
         assert result is None
         assert "Unflare service returned status 502" in caplog.text
@@ -342,9 +351,7 @@ class TestUnflareHandler:
         sessions = [unflare_session, final_session]
         with patch("aiohttp.ClientSession", side_effect=sessions):
             with caplog.at_level(logging.WARNING):
-                result = await handler._refresh_cache_and_request(
-                    "http://example.com", {}
-                )
+                result = await handler.get("http://example.com", {})
 
         assert result is None
         assert "Cached-session request failed with status 503" in caplog.text
@@ -409,7 +416,7 @@ class TestUnflareHandler:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         with patch("aiohttp.ClientSession", return_value=mock_session) as mock_cls:
-            await handler._refresh_cache_and_request("http://example.com", {})
+            await handler.get("http://example.com", {})
 
             # All ClientSession calls should include a timeout
             for call in mock_cls.call_args_list:
@@ -446,9 +453,7 @@ class TestUnflareHandler:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         with patch("aiohttp.ClientSession", return_value=mock_session) as mock_cls:
-            await handler._refresh_cache_and_request(
-                "http://example.com", {"User-Agent": "test"}
-            )
+            await handler.get("http://example.com", {"User-Agent": "test"})
 
             # The final session (second call) should have Accept-Encoding in headers
             final_call = mock_cls.call_args_list[-1]
@@ -552,10 +557,55 @@ class TestUnflareHandler:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         with patch("aiohttp.ClientSession", return_value=mock_session):
-            result = await handler._refresh_cache_and_request("http://example.com", {})
+            result = await handler.get("http://example.com", {})
 
         assert result == "<html>OK</html>"
         assert handler.is_cache_valid()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            ValueError("Expecting value"),  # malformed JSON body
+            ["not", "an", "object"],
+            {"cookies": {"cf_clearance": "abc"}, "headers": {}},
+            {"cookies": [{"value": "abc"}], "headers": {}},
+            {"cookies": ["cf_clearance=abc"], "headers": {}},
+            {"cookies": [], "headers": ["User-Agent", "x"]},
+            {
+                "cookies": [
+                    {"name": "cf_clearance", "value": "abc", "expires": "1999999999"}
+                ],
+                "headers": {},
+            },
+            {"cookies": [], "headers": {"User-Agent": 1}},
+        ],
+    )
+    async def test_malformed_unflare_payload_returns_none(self, payload):
+        """A payload cache_credentials() cannot use fails the solve (None from
+        get()) instead of raising out of it, and caches nothing."""
+        handler = UnflareRequestHandler(UnflareConfig())
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        if isinstance(payload, Exception):
+            mock_response.json = AsyncMock(side_effect=payload)
+        else:
+            mock_response.json = AsyncMock(return_value=payload)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = AsyncMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            assert await handler.get("http://example.com", {}) is None
+
+        assert not handler.is_cache_valid()
+        mock_session.get.assert_not_called()
 
     @pytest.mark.unit
     def test_cache_credentials_tolerates_null_expires(self):

@@ -8,9 +8,11 @@
 ## What shipped on this branch
 
 - `CachedCredentialHandler` base (in `handlers/base_handler.py`) — owns the
-  credential cache + fast `aiohttp` replay. `UnflareRequestHandler` now subclasses
-  it (behaviour unchanged; all prior tests pass) and implements only its
-  service-specific `_refresh_cache_and_request`.
+  credential cache, fast `aiohttp` replay, and single-flight solving (#47): at
+  most one solve runs at a time, and every request needing fresh credentials
+  awaits that same solve task, sharing its credentials, failure, or exception.
+  `UnflareRequestHandler` and `NodriverRequestHandler` subclass it and implement
+  only their service-specific `_solve`.
 - `NodriverRequestHandler` (`handlers/nodriver_handler.py`) — the user-facing
   handler. It only orchestrates: ask the credential source for credentials, cache
   them, replay over the shared cache/replay path. It is assembled from one-class-
@@ -23,10 +25,10 @@
   | `NodriverCredentialSource` | `nodriver/nodriver_credential_source.py` | Load the URL, clear the challenge, return `Credentials` (never the page) |
   | `CookieHarvester` | `nodriver/cookie_harvester.py` | Read the cookies for one host from a nodriver browser (domain-suffix match) |
   | `Credentials` | `cloudflare/credentials.py` | Cookies + user-agent value object, shared by any Cloudflare bypass |
-  | `LoopBoundLock` | `concurrency/loop_bound_lock.py` | An `asyncio.Lock` recreated per event loop (single-flight solves) |
 
-  Only `nodriver/` depends on the optional `nodriver` package; `cloudflare/` and
-  `concurrency/` import with the base install.
+  Only `nodriver/` depends on the optional `nodriver` package; `cloudflare/`
+  imports with the base install. (A `concurrency/LoopBoundLock` for the solve lock
+  was removed in #47, when single-flight became a shared solve task in the base.)
 
   Each has a small public interface and its own unit tests, so the handler's tests
   replace collaborators instead of patching private methods. Applying the same
@@ -50,7 +52,9 @@ lowercase `user-agent` cannot ride along with the cached `User-Agent`.
 - Cache expiry anchors on the `cf_clearance` cookie specifically — neither a
   short-lived `__cf_bm` (which would cap it) nor an unrelated long-lived
   first-party cookie (which would extend it past the real session) affects it.
-- A double-checked lock stops concurrent cold-start requests from double-solving.
+- Single-flight solving stops concurrent cold-start requests from double-solving
+  (a double-checked lock until #47; now a shared solve task in
+  `CachedCredentialHandler`).
 - Cookie host filtering uses a proper domain-suffix match, not substring.
 - **Like `UnflareRequestHandler`, the browser is purely a credential factory: the
   page it loaded is never returned.** After a solve, the result always comes from

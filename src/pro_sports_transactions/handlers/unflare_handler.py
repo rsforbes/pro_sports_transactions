@@ -44,10 +44,13 @@ class UnflareRequestHandler(CachedCredentialHandler):
         # calls it ``response_headers``.
         super().cache_credentials(cookies, unflare_headers)
 
-    async def _refresh_cache_and_request(
-        self, url: str, headers: Dict[str, str]
-    ) -> Optional[str]:
-        """Get fresh cookies from Unflare and cache them"""
+    async def _solve(self, url: str) -> bool:
+        """Get fresh cookies from Unflare and cache them.
+
+        Returns whether credentials were cached. The shared base runs one at a
+        time and shares it, so concurrent callers with an expired cache
+        trigger one Unflare solve, not one each, then replay the result.
+        """
         logger.info("Requesting fresh credentials from Unflare")
         request_data = {"url": url, "timeout": self.config.timeout, "method": "GET"}
 
@@ -68,29 +71,51 @@ class UnflareRequestHandler(CachedCredentialHandler):
                             response.status,
                             await response.text(),
                         )
-                        return None
+                        return False
 
                     result = await response.json()
+                    if not isinstance(result, dict):
+                        logger.error(
+                            "Unflare returned an unexpected payload type: %s",
+                            type(result).__name__,
+                        )
+                        return False
 
-                    if "code" in result and result["code"] == "error":
+                    if result.get("code") == "error":
                         logger.error(
                             "Unflare error: %s",
                             result.get("message", "Unknown error"),
                         )
-                        return None
+                        return False
 
                     # "or": a JSON null must not be cached - None headers mean
                     # "no cache" and would break the replay's header merge.
                     cookies = result.get("cookies") or []
                     unflare_headers = result.get("headers") or {}
-        except (aiohttp.ClientError, OSError) as e:
+                    if not (
+                        isinstance(cookies, list)
+                        and all(
+                            isinstance(c, dict)
+                            and "name" in c
+                            and "value" in c
+                            # cache_credentials() compares expires to 0
+                            and isinstance(c.get("expires") or 0, (int, float))
+                            for c in cookies
+                        )
+                        and isinstance(unflare_headers, dict)
+                        and all(isinstance(v, str) for v in unflare_headers.values())
+                    ):
+                        # cache_credentials() would raise out of get() (or
+                        # cache headers the replay cannot merge).
+                        logger.error("Unflare returned malformed cookies or headers")
+                        return False
+        except (aiohttp.ClientError, OSError, ValueError) as e:
+            # ValueError: a malformed JSON body (json.JSONDecodeError) must not
+            # escape get() either.
             logger.error("Unflare request failed: %s", e)
-            return None
+            return False
 
-        # Cache the cookies and headers, then fulfil the request via the shared
-        # replay path (single source of truth for header merging,
-        # Accept-Encoding, and 403 -> cache-clear handling). Done after the
-        # Unflare session closes so its connection is not held open across the
-        # replay and its retries.
+        # Cached after the Unflare session closes, so its connection is not
+        # held open across the base's replay and its retries.
         self.cache_credentials(cookies, unflare_headers)
-        return await self._try_cached_request(url, headers)
+        return True

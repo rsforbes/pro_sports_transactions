@@ -19,9 +19,8 @@ Cloudflare's managed challenge is not reliably solved by headless Chrome. See
 
 import asyncio
 import logging
-from typing import Dict, Optional
+from typing import Optional
 
-from ..concurrency.loop_bound_lock import LoopBoundLock
 from ..nodriver.browser_session import BrowserSession
 from ..nodriver.nodriver_config import NodriverConfig
 from ..nodriver.nodriver_credential_source import NodriverCredentialSource
@@ -44,8 +43,6 @@ class NodriverRequestHandler(CachedCredentialHandler):
         config: The handler configuration.
         session: Owns the browser process (launch, reuse, event-loop changes).
         source: Drives Chrome through the challenge and returns credentials.
-        solve_lock: Serializes browser solves so concurrent cold-start
-            requests trigger one solve, not one each.
     """
 
     def __init__(self, config: Optional[NodriverConfig] = None):
@@ -53,54 +50,13 @@ class NodriverRequestHandler(CachedCredentialHandler):
         self.config = config or NodriverConfig()
         self.session = BrowserSession(self.config)
         self.source = NodriverCredentialSource(self.session, self.config)
-        self.solve_lock = LoopBoundLock()
-
-    async def _refresh_cache_and_request(
-        self, url: str, headers: Dict[str, str]
-    ) -> Optional[str]:
-        """Get fresh credentials from Chrome, cache them, and replay ``url``.
-
-        Browser/CDP failures are contained so the handler keeps the
-        None-on-failure contract shared with UnflareRequestHandler.
-        """
-        # Credentials the caller's fast path (get()) already replayed and saw
-        # fail; replaying them again would only repeat that failure (up to a
-        # full timeout) before the solve.
-        # Compared by cache generation, not cookie string: cookie-less solves
-        # all cache None, which would make every fresh solve look "already tried".
-        tried = self._cache_generation if self.is_cache_valid() else None
-        async with self.solve_lock.get():
-            # A concurrent caller may have solved while we waited for the lock;
-            # use its credentials instead of solving a second time.
-            solved_meanwhile = self._solved_since(tried)
-            if not solved_meanwhile and not await self._solve(url):
-                return None
-            replayed = self._cache_generation
-
-        # Replay outside the lock: only the browser solve needs serializing, so
-        # callers queued behind a solve replay its credentials in parallel
-        # rather than one at a time (each up to the replay timeout).
-        result = await self._try_cached_request(url, headers)
-        if result is not None or not solved_meanwhile:
-            return result
-        if self._still_cached(replayed):
-            # Not rejected: the site failed, and a solve would not fix that.
-            return None
-
-        # Cloudflare rejected the other caller's credentials for this request
-        # too, so solve for it, as before - unless a caller queued ahead of us
-        # already re-solved after the same failure. Callers that replayed in parallel
-        # and failed together must not each launch a browser solve in turn.
-        # Either way this replays once more and returns, so it cannot loop.
-        async with self.solve_lock.get():
-            if not self._solved_since(replayed) and not await self._solve(url):
-                return None
-        return await self._try_cached_request(url, headers)
 
     async def _solve(self, url: str) -> bool:
         """Drive Chrome through the challenge and cache the credentials.
 
-        Returns whether credentials were cached. Call with ``solve_lock`` held.
+        Returns whether credentials were cached. Browser/CDP failures are
+        contained so the handler keeps the None-on-failure contract shared
+        with UnflareRequestHandler.
         """
         try:
             credentials = await asyncio.wait_for(
@@ -129,4 +85,7 @@ class NodriverRequestHandler(CachedCredentialHandler):
 
     async def close(self):
         """Stop the underlying browser and free its resources."""
+        # Cancel a solve still running first, so it cannot relaunch the browser
+        # after it is stopped.
+        await super().close()
         await self.session.close()

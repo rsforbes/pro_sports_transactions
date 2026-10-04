@@ -5,7 +5,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import aiohttp
 
@@ -20,6 +20,10 @@ _SESSION_COOKIE = "cf_clearance"
 # Bounded retry for the cached-replay hot path so a momentary network blip does
 # not escalate to an expensive fresh credential refresh (a full browser solve).
 _REPLAY_ATTEMPTS = 3
+
+# Most replays one get() makes: the cached credentials, then up to two sets of
+# fresh ones (see CachedCredentialHandler.get).
+_FETCH_ROUNDS = 3
 
 
 @dataclass
@@ -42,8 +46,13 @@ class CachedCredentialHandler(RequestHandler):
 
     The expensive "how do I obtain fresh credentials" step is the only part
     that differs between strategies (an Unflare sidecar, an in-process browser,
-    ...), so subclasses implement just ``_refresh_cache_and_request``. The cache
-    lifecycle and the fast replay path are shared here.
+    ...), so subclasses implement just ``_solve``. The cache lifecycle, the
+    replay path, and single-flight solving are shared here.
+
+    Single flight: at most one solve runs at a time, and every request that
+    needs fresh credentials while it runs awaits that same solve, so they all
+    share its outcome - its credentials, its failure, or its exception -
+    instead of each solving in turn.
     """
 
     def __init__(self):
@@ -54,43 +63,119 @@ class CachedCredentialHandler(RequestHandler):
         # credentials I used?" works even for cookie-less sessions, whose
         # cookie string (None) is identical across solves.
         self._cache_generation: int = 0
+        # The solve in progress, if any; see _shared_solve().
+        self._solve_task: Optional[asyncio.Task] = None
 
     async def get(self, url: str, headers: Dict[str, str]) -> Optional[str]:
-        # Fast path: replay cached credentials if they are still valid.
-        if self.is_cache_valid():
-            generation = self._cache_generation
-            result = await self._try_cached_request(url, headers)
-            if result is not None:
-                return result
-            if self._still_cached(generation):
-                # The site failed (404, 5xx, timeout), not the credentials:
-                # fresh ones would hit the same failure, so leave retrying to
-                # the caller rather than paying for a solve.
+        """Replay ``url`` with the cached credentials, solving (or joining the
+        solve in progress) when there are none.
+
+        Each round replays once. A success returns the page. A failure that
+        left the credentials cached was the site (404, 5xx, timeout), not
+        Cloudflare: fresh credentials would hit it too, so return ``None`` and
+        leave retrying to the caller. A rejection moves on to newer
+        credentials, unless they came from a solve this request started, or
+        from its second solve: another solve right away is unlikely to do
+        better. (Without the second limit, callers that keep joining each
+        other's rejected solves would drive a third solve in a row.) Bounded,
+        so a request never loops. (Credentials a round moves on from are no
+        longer cached - see ``_rejected`` - so the next round never retries
+        them.)
+        """
+        solves = 0
+        for _ in range(_FETCH_ROUNDS):
+            generation = self._valid_generation()
+            started = False
+            if generation is None:
+                generation, started = await self._shared_solve(url)
+                solves += 1
+                if generation is None:
+                    return None
+
+            # A joined solve's credentials can be rejected for another request
+            # (or cleared) before this one replays them: skip to newer ones.
+            if not self._rejected(generation):
+                result = await self._try_cached_request(url, headers)
+                if result is not None:
+                    return result
+                if not self._rejected(generation):
+                    return None
+            if started or solves == 2:
                 return None
+        return None
 
-        # Cache miss, expired, or the cached credentials were rejected.
-        return await self._refresh_cache_and_request(url, headers)
+    def _valid_generation(self) -> Optional[int]:
+        """The generation of the cached credentials, if they are valid."""
+        return self._cache_generation if self.is_cache_valid() else None
 
-    def _still_cached(self, generation: int) -> bool:
-        """Whether the credentials of ``generation`` are still cached and valid.
+    def _rejected(self, generation: int) -> bool:
+        """Whether the credentials of ``generation`` are no longer cached:
+        rejected by Cloudflare, cleared, or replaced by newer ones.
 
         A rejection clears the credentials it was sent with (see
-        ``_try_cached_request``), so after a failed replay this means the
-        failure was not Cloudflare rejecting them.
+        ``_try_cached_request``), so after a failed replay this tells a
+        rejection from a site failure. Expiry is ignored: credentials that
+        expired during a failed replay were not rejected.
         """
-        return self.is_cache_valid() and self._cache_generation == generation
+        return self._cache_generation != generation or self._cached_headers is None
 
-    def _solved_since(self, generation: Optional[int]) -> bool:
-        """Whether the cache holds valid credentials newer than ``generation``."""
-        return self.is_cache_valid() and self._cache_generation != generation
+    async def _shared_solve(self, url: str) -> Tuple[Optional[int], bool]:
+        """Join the solve in progress, or start one.
+
+        Returns the generation it cached (``None`` if it failed) and whether
+        this call started it. A solve's exception propagates to every request
+        awaiting it.
+        """
+        loop = asyncio.get_running_loop()
+        task = self._solve_task
+        # A task from an earlier asyncio.run() belongs to a closed loop.
+        started = task is None or task.done() or task.get_loop() is not loop
+        if started:
+            task = loop.create_task(self._run_solve(url))
+            # Mark the exception retrieved, so a solve whose every waiter was
+            # cancelled does not log "Task exception was never retrieved".
+            task.add_done_callback(lambda t: t.cancelled() or t.exception())
+            self._solve_task = task
+        # shield: a cancelled request must not cancel the solve that other
+        # requests are awaiting.
+        try:
+            return await asyncio.shield(task), started
+        except asyncio.CancelledError:
+            # The solve itself was cancelled (close()), not this request: a
+            # failed solve, so get() keeps its None-on-failure contract.
+            if task.cancelled() and not asyncio.current_task().cancelling():
+                return None, started
+            raise
+
+    async def _run_solve(self, url: str) -> Optional[int]:
+        """Run ``_solve`` and return the generation it cached, or ``None``."""
+        before = self._cache_generation
+        try:
+            solved = await self._solve(url)
+        finally:
+            if self._solve_task is asyncio.current_task():
+                self._solve_task = None
+        # A solve that reports success without caching anything would send
+        # the replay out with no credentials; treat it as failed. Credentials
+        # that are already past the early-refresh margin still count: they
+        # are about to expire, not rejected.
+        if (
+            solved
+            and self._cache_generation != before
+            and self._cached_headers is not None
+        ):
+            return self._cache_generation
+        return None
 
     @abstractmethod
-    async def _refresh_cache_and_request(
-        self, url: str, headers: Dict[str, str]
-    ) -> Optional[str]:
-        """Obtain fresh credentials, populate the cache via
-        ``cache_credentials``, fulfil this request, and return the response
-        text (or ``None`` on failure)."""
+    async def _solve(self, url: str) -> bool:
+        """Obtain fresh credentials for ``url`` and store them with
+        ``cache_credentials``.
+
+        Returns whether credentials were cached. Only one runs at a time.
+        Failures should be contained (logged, then ``False``) so ``get()``
+        keeps its None-on-failure contract.
+        """
 
     def is_cache_valid(self) -> bool:
         """Check if cached credentials are still valid.
@@ -269,13 +354,27 @@ class CachedCredentialHandler(RequestHandler):
     async def close(self):
         """Release resources held by the handler. The base holds none (each request opens
         and closes its own session); subclasses that own resources, such as a
-        browser, override this. Cached credentials are kept.
+        browser, override this and call it first. Cached credentials are kept.
+
+        A solve still running (one a cancelled request left behind: the solve
+        is shielded from its callers) is cancelled and awaited, so it cannot
+        acquire resources, such as a browser, after the handler is closed.
 
         Every built-in handler supports ``close()`` and ``async with``, so
         handlers can be swapped without changing the calling code. (Defined on
         the concrete handlers rather than the abstract ``RequestHandler`` so
         custom handlers' method resolution is unaffected.)
         """
+        task = self._solve_task
+        if (
+            task is not None
+            and not task.done()
+            and task.get_loop() is asyncio.get_running_loop()
+        ):
+            task.cancel()
+            # wait(), not await: the solve's outcome is not ours to raise, but
+            # a cancellation of close() itself still propagates.
+            await asyncio.wait([task])
 
     async def __aenter__(self):
         return self
