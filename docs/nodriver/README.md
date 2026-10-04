@@ -136,8 +136,11 @@ Result: first verify attempt returned `Basketball Transactions Search Results`, 
 ```python
 import asyncio, nodriver as uc
 
-URL = ("https://www.prosportstransactions.com/basketball/Search/SearchResults.php"
-       "?Player=&Team=&BeginDate=&EndDate=&PlayerMovementChkBx=yes&submit=Search")
+URL = (
+    "https://www.prosportstransactions.com/basketball/Search/SearchResults.php"
+    "?Player=&Team=&BeginDate=&EndDate=&PlayerMovementChkBx=yes&submit=Search"
+)
+
 
 async def main():
     browser = await uc.start(
@@ -148,12 +151,13 @@ async def main():
     page = await browser.get(URL)
     for _ in range(8):
         html = await page.get_content()
-        if "_cf_chl" not in html:   # challenge-only marker (see handler)
+        if "_cf_chl" not in html:  # challenge-only marker (see handler)
             break
-        await page.verify_cf()          # clicks the Turnstile checkbox (needs opencv-python)
+        await page.verify_cf()  # clicks the Turnstile checkbox (needs opencv-python)
         await asyncio.sleep(5)
     print(len(html))
     browser.stop()
+
 
 uc.loop().run_until_complete(main())
 ```
