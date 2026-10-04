@@ -435,6 +435,32 @@ class TestUnflareHandler:
         assert sent["Cookie"] == "cf_clearance=abc"
 
     @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_refresh_tolerates_null_cookies_and_headers(self):
+        """JSON nulls for "cookies"/"headers" are cached as empty, so the replay
+        still runs instead of raising TypeError on the header merge."""
+        handler = UnflareRequestHandler(UnflareConfig())
+
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={"cookies": None, "headers": None})
+        mock_response.text = AsyncMock(return_value="<html>OK</html>")
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = AsyncMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        mock_session.get = MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            result = await handler._refresh_cache_and_request("http://example.com", {})
+
+        assert result == "<html>OK</html>"
+        assert handler.is_cache_valid()
+
+    @pytest.mark.unit
     def test_cache_credentials_tolerates_null_expires(self):
         """A JSON null ``expires`` must fall back to the default lifetime rather
         than raising TypeError out of get()."""

@@ -79,8 +79,10 @@ class UnflareRequestHandler(CachedCredentialHandler):
                         )
                         return None
 
-                    cookies = result.get("cookies", [])
-                    unflare_headers = result.get("headers", {})
+                    # "or": a JSON null must not be cached - None headers mean
+                    # "no cache" and would break the replay's header merge.
+                    cookies = result.get("cookies") or []
+                    unflare_headers = result.get("headers") or {}
         except (aiohttp.ClientError, OSError) as e:
             logger.error("Unflare request failed: %s", e)
             return None

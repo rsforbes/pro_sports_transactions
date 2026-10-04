@@ -152,6 +152,151 @@ class TestNodriverRequestHandler:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
+    async def test_replays_outside_the_solve_lock(self):
+        """Only the browser solve is serialized; the replay (up to the full
+        request timeout) must not hold the lock."""
+        handler, _, replay = make_handler()
+
+        async def check_unlocked(_url, _headers):
+            assert not handler.solve_lock.get().locked()
+            return "<html>replayed</html>"
+
+        replay.side_effect = check_unlocked
+
+        assert (
+            await handler._refresh_cache_and_request(URL, {}) == "<html>replayed</html>"
+        )
+        replay.assert_awaited_once()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_callers_queued_behind_a_solve_replay_in_parallel(self):
+        """Concurrent cold-start callers trigger one solve, then all replay its
+        credentials at the same time rather than one after another."""
+        handler, source, replay = make_handler()
+        in_flight = 0
+        peak = 0
+
+        async def slow_replay(_url, _headers):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0.01)
+            in_flight -= 1
+            return "<html>replayed</html>"
+
+        async def slow_solve(_url):
+            await asyncio.sleep(0.01)  # long enough for every caller to queue
+            return CREDENTIALS
+
+        replay.side_effect = slow_replay
+        source.get_credentials.side_effect = slow_solve
+
+        results = await asyncio.gather(
+            *(handler._refresh_cache_and_request(URL, {}) for _ in range(5))
+        )
+
+        assert results == ["<html>replayed</html>"] * 5
+        source.get_credentials.assert_awaited_once()
+        assert peak == 5
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_solves_when_credentials_solved_meanwhile_fail(self):
+        """If another caller's fresh credentials fail for this request, solve
+        for it rather than returning None."""
+        handler, source, replay = make_handler()
+        replay.side_effect = [None, "<html>after solve</html>"]
+
+        class SolvedWhileWaiting:
+            async def __aenter__(self):
+                if not handler.is_cache_valid():
+                    handler.cache_credentials(
+                        [{"name": "cf_clearance", "value": "tok"}],
+                        {"User-Agent": "Chrome/136"},
+                    )
+
+            async def __aexit__(self, *exc):
+                return False
+
+        handler.solve_lock = MagicMock()
+        handler.solve_lock.get = MagicMock(return_value=SolvedWhileWaiting())
+
+        assert (
+            await handler._refresh_cache_and_request(URL, {})
+            == "<html>after solve</html>"
+        )
+        source.get_credentials.assert_awaited_once()
+        assert replay.await_count == 2
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_callers_failing_together_on_a_solve_share_one_re_solve(self):
+        """Callers that replay a fresh solve in parallel and all see it
+        rejected must not each launch a browser solve in turn: the first one
+        re-solves and the rest replay its credentials."""
+        handler, source, replay = make_handler()
+        solves = 0
+
+        async def solve(_url):
+            nonlocal solves
+            solves += 1
+            await asyncio.sleep(0.01)
+            return Credentials(
+                cookies=[
+                    {
+                        "name": "cf_clearance",
+                        "value": f"v{solves}",
+                        "expires": time.time() + 3600,
+                    }
+                ],
+                user_agent="Chrome/136",
+            )
+
+        async def reject_first_solve(_url, _headers):
+            if not handler.is_cache_valid():
+                return None
+            sent, sent_cookies = handler._cache_generation, handler._cached_cookies
+            await asyncio.sleep(0.01)
+            if sent_cookies == "cf_clearance=v1":
+                if handler._cache_generation == sent:
+                    handler.clear_cache()
+                return None
+            return "<html>replayed</html>"
+
+        source.get_credentials.side_effect = solve
+        replay.side_effect = reject_first_solve
+
+        results = await asyncio.gather(
+            *(handler._refresh_cache_and_request(URL, {}) for _ in range(5))
+        )
+
+        assert results.count("<html>replayed</html>") == 4
+        assert source.get_credentials.await_count == 2
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_queued_callers_reuse_a_cookieless_solve(self):
+        """A cookie-less solve caches the same (None) cookie string every time,
+        so callers queued behind it must still recognise it as new."""
+        handler, source, _ = make_handler(
+            credentials=Credentials(cookies=[], user_agent="Chrome/136")
+        )
+
+        async def slow_solve(_url):
+            await asyncio.sleep(0.01)
+            return Credentials(cookies=[], user_agent="Chrome/136")
+
+        source.get_credentials.side_effect = slow_solve
+
+        await asyncio.gather(
+            *(handler._refresh_cache_and_request(URL, {}) for _ in range(3))
+        )
+
+        source.get_credentials.assert_awaited_once()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_does_not_re_replay_credentials_get_already_tried(self):
         """Credentials valid on entry were just replayed by get()'s fast path and
         failed; they must not be replayed again under the lock before solving."""

@@ -64,41 +64,69 @@ class NodriverRequestHandler(CachedCredentialHandler):
         None-on-failure contract shared with UnflareRequestHandler.
         """
         # Credentials the caller's fast path (get()) already replayed and saw
-        # fail; replaying them again under the lock would only repeat that
-        # failure (up to a full timeout) before the solve.
-        tried = self._cached_cookies if self.is_cache_valid() else None
+        # fail; replaying them again would only repeat that failure (up to a
+        # full timeout) before the solve.
+        # Compared by cache generation, not cookie string: cookie-less solves
+        # all cache None, which would make every fresh solve look "already tried".
+        tried = self._cache_generation if self.is_cache_valid() else None
         async with self.solve_lock.get():
             # A concurrent caller may have solved while we waited for the lock;
-            # replay the now-valid cache instead of solving a second time.
-            if self.is_cache_valid() and self._cached_cookies != tried:
-                cached = await self._try_cached_request(url, headers)
-                if cached is not None:
-                    return cached
-
-            try:
-                credentials = await asyncio.wait_for(
-                    self.source.get_credentials(url), self.config.solve_timeout
-                )
-            except Exception as e:  # browser/CDP failures must not escape get()
-                if isinstance(e, asyncio.TimeoutError):
-                    logger.warning(
-                        "nodriver solve timed out after %ss for %s",
-                        self.config.solve_timeout,
-                        url,
-                    )
-                else:
-                    logger.warning("nodriver solve failed for %s: %s", url, e)
-                # Drop the browser so the next call relaunches it, rather than
-                # reusing a wedged instance (live process, dead CDP connection).
-                await self.session.close()
+            # use its credentials instead of solving a second time.
+            solved_meanwhile = self._solved_since(tried)
+            if not solved_meanwhile and not await self._solve(url):
                 return None
-            if credentials is None:
-                return None
+            replayed = self._cache_generation
 
-            self.cache_credentials(
-                credentials.cookies, {"User-Agent": credentials.user_agent}
+        # Replay outside the lock: only the browser solve needs serializing, so
+        # callers queued behind a solve replay its credentials in parallel
+        # rather than one at a time (each up to the replay timeout).
+        result = await self._try_cached_request(url, headers)
+        if result is not None or not solved_meanwhile:
+            return result
+
+        # The other caller's credentials failed for this request too, so solve
+        # for it, as before - unless a caller queued ahead of us already
+        # re-solved after the same failure. Callers that replayed in parallel
+        # and failed together must not each launch a browser solve in turn.
+        # Either way this replays once more and returns, so it cannot loop.
+        async with self.solve_lock.get():
+            if not self._solved_since(replayed) and not await self._solve(url):
+                return None
+        return await self._try_cached_request(url, headers)
+
+    def _solved_since(self, generation: Optional[int]) -> bool:
+        """Whether the cache holds valid credentials newer than ``generation``."""
+        return self.is_cache_valid() and self._cache_generation != generation
+
+    async def _solve(self, url: str) -> bool:
+        """Drive Chrome through the challenge and cache the credentials.
+
+        Returns whether credentials were cached. Call with ``solve_lock`` held.
+        """
+        try:
+            credentials = await asyncio.wait_for(
+                self.source.get_credentials(url), self.config.solve_timeout
             )
-            return await self._try_cached_request(url, headers)
+        except Exception as e:  # browser/CDP failures must not escape get()
+            if isinstance(e, asyncio.TimeoutError):
+                logger.warning(
+                    "nodriver solve timed out after %ss for %s",
+                    self.config.solve_timeout,
+                    url,
+                )
+            else:
+                logger.warning("nodriver solve failed for %s: %s", url, e)
+            # Drop the browser so the next call relaunches it, rather than
+            # reusing a wedged instance (live process, dead CDP connection).
+            await self.session.close()
+            return False
+        if credentials is None:
+            return False
+
+        self.cache_credentials(
+            credentials.cookies, {"User-Agent": credentials.user_agent}
+        )
+        return True
 
     async def close(self):
         """Stop the underlying browser and free its resources."""
