@@ -91,6 +91,21 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pro_sports_transactions"]
 
+# Hatchling's sdist default is every git-tracked file, which would ship editor,
+# dev container, CI, and tool config. Keep what's useful outside the repo: the
+# source, the tests (so downstream packagers can run them), and the docs and
+# examples the README links to. pyproject.toml is always included.
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/pro_sports_transactions",
+  "tests",
+  "docs",
+  "examples",
+  "README.md",
+  "CHANGELOG.md",
+  "LICENSE",
+]
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"

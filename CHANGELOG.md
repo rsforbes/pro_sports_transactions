@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgraded the test stack to pytest 9 (`>=9.0,<10`), pytest-asyncio 1.x (`>=1.3,<2`), and pytest-mock (`>=3.14,<4`); pinned `asyncio_mode = "strict"` to match the suite's explicit `@pytest.mark.asyncio` markers. The full unit suite passes at both the declared floors and the latest versions
 - Raised the pandas ceiling to `<4` to allow pandas 3.x; the suite passes at both the `2.2.2` floor and `3.0.3`
 - GitHub Actions are pinned to full commit SHAs instead of mutable tags, and checkouts no longer persist the job token (`persist-credentials: false`)
+- The source distribution (sdist) now contains only the source, tests, docs, examples, README, CHANGELOG, and LICENSE; it previously shipped every tracked file, including editor, dev container, CI, and tool configuration
 
 ### Fixed
 - Raised the `aiohttp` floor from `>=3.13.3` to `>=3.14.3` (and the locked version from 3.14.1) so no allowed version is affected by CVE-2026-69244 (HIGH: denial of service via malformed HTTP responses), found by the new Trivy scan
