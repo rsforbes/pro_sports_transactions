@@ -14,12 +14,19 @@ FROM mcr.microsoft.com/devcontainers/python:1-${VARIANT}
 # - libgl1: needed to import opencv-python, which backs nodriver's verify_cf().
 # The base image's Yarn apt source (unused here) has carried an expired signing
 # key that makes `apt-get update` fail, so drop it first.
+# Google ships Linux Chrome for amd64 only; on other architectures (e.g. arm64
+# on Apple Silicon) Chrome is skipped so the container still builds, and the
+# live nodriver integration test skips itself.
 RUN rm -f /etc/apt/sources.list.d/yarn.list \
-    && curl -fsSLo /tmp/chrome.deb \
-        https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && CHROME_DEB="" \
+    && if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+        curl -fsSLo /tmp/chrome.deb \
+            https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+        && CHROME_DEB=/tmp/chrome.deb; \
+    fi \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        /tmp/chrome.deb xvfb xauth libgl1 \
+        $CHROME_DEB xvfb xauth libgl1 \
     && rm -rf /tmp/chrome.deb /var/lib/apt/lists/*
 
 # Switch from root to the vscode user for security and proper file permissions
