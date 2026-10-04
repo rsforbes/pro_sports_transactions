@@ -1,10 +1,13 @@
 """Example: Search for NBA transactions using the Unflare handler.
 
 Requires a running Unflare service (default: http://localhost:5002/scrape).
-See https://github.com/AykutSarac/unflare for setup instructions.
+See https://github.com/iamyegor/Unflare for setup instructions.
 
 Usage:
     python examples/unflare_search.py
+
+In a Jupyter notebook, paste the code into a cell and replace
+asyncio.run(main()) with: await main()
 """
 
 import asyncio
@@ -31,21 +34,22 @@ async def main():
         url="http://localhost:5002/scrape",  # Unflare service URL
         timeout=60000,  # Timeout passed to Unflare (ms)
     )
-    handler = UnflareRequestHandler(config)
+    # Same calling pattern as every handler: swap in NodriverRequestHandler()
+    # or DirectRequestHandler() without changing anything else.
+    async with UnflareRequestHandler(config) as handler:
+        # Search for NBA player movements in a date range
+        search = Search(
+            league=League.NBA,
+            transaction_types=(TransactionType.Movement,),
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 31),
+            request_handler=handler,
+        )
 
-    # Search for NBA player movements in a date range
-    search = Search(
-        league=League.NBA,
-        transaction_types=(TransactionType.Movement,),
-        start_date=date(2024, 1, 1),
-        end_date=date(2024, 1, 31),
-        request_handler=handler,
-    )
+        print(f"Search URL: {await search.get_url()}\n")
 
-    print(f"Search URL: {await search.get_url()}\n")
-
-    # Get results as a DataFrame
-    df = await search.get_dataframe()
+        # Get results as a DataFrame
+        df = await search.get_dataframe()
 
     if "errors" in df.attrs:
         print(f"Errors: {df.attrs['errors']}")

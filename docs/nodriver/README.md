@@ -1,6 +1,9 @@
 # nodriver Integration — In-Process Cloudflare Bypass
 
-**Status:** implemented (opt-in plugin) · **Branch:** `feature/nodriver-integration` · **Date:** 2026-07-11
+**Status:** implemented (opt-in plugin) · **Branch:** `feature/nodriver-integration` · **Date:** 2026-07-11 · **Last updated:** 2026-10-03
+
+> User-facing setup, supported browsers, and caveats live in the main
+> [README](../../README.md#prerequisites). This document is the design record.
 
 ## What shipped on this branch
 
@@ -8,38 +11,70 @@
   credential cache + fast `aiohttp` replay. `UnflareRequestHandler` now subclasses
   it (behaviour unchanged; all prior tests pass) and implements only its
   service-specific `_refresh_cache_and_request`.
-- `NodriverRequestHandler` + `NodriverConfig` (`handlers/nodriver_handler.py`) —
-  solves the challenge in a real Chrome, harvests `cf_clearance` + user-agent,
-  and reuses the shared cache/replay path.
+- `NodriverRequestHandler` (`handlers/nodriver_handler.py`) — the user-facing
+  handler. It only orchestrates: ask the credential source for credentials, cache
+  them, replay over the shared cache/replay path. It is assembled from one-class-
+  per-file building blocks, grouped by what they depend on:
+
+  | Class | File | Responsibility |
+  | --- | --- | --- |
+  | `NodriverConfig` | `nodriver/nodriver_config.py` | User settings (re-exported from `handlers`) |
+  | `BrowserSession` | `nodriver/browser_session.py` | Launch/reuse/close the browser; fail fast on a missing extra; relaunch on an event-loop change |
+  | `NodriverCredentialSource` | `nodriver/nodriver_credential_source.py` | Load the URL, clear the challenge, return `Credentials` (never the page) |
+  | `CookieHarvester` | `nodriver/cookie_harvester.py` | Read the cookies for one host from a nodriver browser (domain-suffix match) |
+  | `Credentials` | `cloudflare/credentials.py` | Cookies + user-agent value object, shared by any Cloudflare bypass |
+  | `LoopBoundLock` | `concurrency/loop_bound_lock.py` | An `asyncio.Lock` recreated per event loop (single-flight solves) |
+
+  Only `nodriver/` depends on the optional `nodriver` package; `cloudflare/` and
+  `concurrency/` import with the base install.
+
+  Each has a small public interface and its own unit tests, so the handler's tests
+  replace collaborators instead of patching private methods. Applying the same
+  structure to the shipped handlers is tracked in #49.
 - `[nodriver]` optional extra in `pyproject.toml` (`nodriver`, `opencv-python`).
   Chrome and (on headless hosts) xvfb are external prerequisites.
-- Unit tests: `tests/unit/handlers/test_nodriver_handler.py` (fully mocked).
+- Unit tests (fully mocked): `tests/unit/nodriver/` (one file per class) and
+  `tests/unit/handlers/test_nodriver_handler.py` (orchestration).
 
-**Verified live end-to-end (2026-07-11):** `NodriverRequestHandler.get()` against
-the PST NBA search returned a 394 KB page with the results table on the first
-call (browser solve), and a 329 KB table on the second call via the **cached
-`aiohttp` replay path** — confirming the harvested `cf_clearance` + UA work with a
-plain HTTP client from the same IP, so only the first request pays the browser cost.
+**Verified live end-to-end (2026-10-03):** the integration test
+(`tests/integration/handlers/test_nodriver_handler_integration.py`, run under
+`xvfb-run -a` in the dev container) clears the challenge in Chrome on the first
+request, then serves the second request and a full `Search` through the **cached
+`aiohttp` replay path**, with `is_cache_valid()` true after the first solve. The
+harvested `cf_clearance` + UA work with a plain HTTP client from the same IP, so only
+the first request pays the browser cost. Replay requires that only the browser's UA is
+sent: `_try_cached_request` merges caller headers case-insensitively so a caller's
+lowercase `user-agent` cannot ride along with the cached `User-Agent`.
 
-**Hardening from code review (two high-effort rounds):**
+**Hardening from code review:**
 - Cache expiry anchors on the `cf_clearance` cookie specifically — neither a
   short-lived `__cf_bm` (which would cap it) nor an unrelated long-lived
   first-party cookie (which would extend it past the real session) affects it.
 - A double-checked lock stops concurrent cold-start requests from double-solving.
 - Cookie host filtering uses a proper domain-suffix match, not substring.
-- Success requires **both** the challenge marker (`_cf_chl`) gone **and** a
-  captured `cf_clearance`; a Cloudflare block page (error 1020) or a Chrome
-  net-error page — which also lack the marker — return `None` instead of being
-  parsed as a successful fetch. `challenge-platform` is deliberately not a marker
-  (Cloudflare's beacon injects it into normal pages too).
+- **Like `UnflareRequestHandler`, the browser is purely a credential factory: the
+  page it loaded is never returned.** After a solve, the result always comes from
+  replaying the harvested `cf_clearance` + UA over plain `aiohttp`; if that replay
+  fails, the result is `None`. So the first response and all later cached responses
+  are the same raw server HTML, and a Cloudflare block page (error 1020) or Chrome
+  net-error page — which lack the challenge marker, and may sit beside a leftover
+  `cf_clearance` in the reused browser's jar — can never reach the parser. A
+  leftover cookie that is still valid is simply used (Cloudflare does not reissue a
+  live one), keeping re-solves cheap.
+- The solve gives up early (no replay) while the challenge marker (`_cf_chl`) is
+  still present. A `cf_clearance` is **not** required: Cloudflare may serve the page
+  without a challenge (and so without issuing one), and the replay decides success
+  either way. `challenge-platform` is deliberately not a marker (Cloudflare's beacon
+  injects it into normal pages too).
+- The browser connection and solve lock belong to the event loop that created them.
+  Each `asyncio.run()` creates and then closes a new loop, so a handler reused across
+  `asyncio.run()` calls detects the loop change, stops the old browser, and launches a
+  new one (observed live: without this, the reused connection hung `get()`
+  indefinitely).
 - Browser/CDP exceptions are contained, preserving the `None`-on-failure contract
   the sibling `UnflareRequestHandler` honors.
 - The solve loop re-checks once after the final `verify_cf`, so a last-attempt
   clear is not misreported as a failure.
-- The solve path returns its result **through the shared cached-replay path**, so
-  the first response and all later cached responses are the same raw server HTML
-  (verified live: both calls now return an identical 329 KB page). The browser is
-  purely a credential factory.
 - Transient network errors on the cached replay retry a few times instead of
   escalating a blip into a full browser re-solve.
 
@@ -113,7 +148,7 @@ async def main():
     page = await browser.get(URL)
     for _ in range(8):
         html = await page.get_content()
-        if "Just a moment" not in html and html.count("<tr") > 1:
+        if "_cf_chl" not in html:   # challenge-only marker (see handler)
             break
         await page.verify_cf()          # clicks the Turnstile checkbox (needs opencv-python)
         await asyncio.sleep(5)
@@ -159,7 +194,15 @@ A `NodriverRequestHandler` implementing the existing `RequestHandler` interface:
 - Per-solve cost: a few seconds and a few hundred MB RAM.
 - It remains an arms race — nodriver / `verify_cf` will need periodic updates as Cloudflare
   changes. This is the maintenance burden Unflare/FlareSolverr currently absorb.
-- Chromium does **not** substitute for Google Chrome here; document the Chrome requirement.
+- Chromium does **not** substitute for Google Chrome here (documented in the README's
+  "Supported browsers" table).
+- nodriver's `find_chrome_executable()` also matches `chromium`/`chromium-browser`/`chrome`
+  on Linux and `Chromium.app` on macOS, and picks the **shortest** path when several exist,
+  so with Chromium installed alongside Chrome, auto-detect can silently choose Chromium.
+  On Windows it only searches Chrome stable/Beta/Canary install dirs.
+- Browser scope: nodriver is CDP-only, so Firefox/Safari are impossible. Edge/Brave are
+  CDP-capable but never auto-detected and untested against Cloudflare.
+- Live testing so far is Linux-only (dev container, WSL2 + xvfb); Windows/macOS untested.
 
 ## Open questions / next steps
 
@@ -168,9 +211,14 @@ A `NodriverRequestHandler` implementing the existing `RequestHandler` interface:
       with plain `aiohttp` from the same IP works (see live result above).
 - [x] Package as an optional extra (`pip install pro_sports_transactions[nodriver]`);
       Unflare remains the documented default until nodriver is proven in the wild.
-- [ ] README: document the handler, the extra, and the Chrome/xvfb prerequisites.
-- [ ] Add an example (`examples/nodriver_search.py`) mirroring `unflare_search.py`.
+- [x] README: document the handler, the extra, the Chrome/xvfb prerequisites, supported
+      browsers, and caveats.
+- [x] Add an example (`examples/nodriver_search.py`) mirroring `unflare_search.py`.
 - [ ] CI: unit tests run without the extra; consider an opt-in integration job that
       installs Chrome + xvfb and exercises a real solve.
 - [ ] Headless-with-patches investigation: can we avoid the xvfb requirement on servers?
 - [ ] Keep the Unflare handler as a fallback; do not remove until nodriver is proven.
+- [ ] Live-test on Windows and macOS desktops.
+- [ ] Warn (or fail fast) when the launched binary looks like unbranded Chromium.
+- [ ] Consider persisting the cached `cf_clearance` across processes (observed lifetime
+      ~1 year on PST) to avoid a browser solve per run.
