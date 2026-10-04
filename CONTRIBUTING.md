@@ -20,7 +20,7 @@ The format is:
 Examples:
 
 ```
-feat: add cloudscraper request handler
+feat: add nodriver request handler
 fix(search): handle empty response body
 docs: document the unflare handler
 chore(deps): bump aiohttp to 3.13.3
