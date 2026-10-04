@@ -6,9 +6,10 @@ allowing different strategies for bypassing Cloudflare protection and
 other network challenges.
 """
 
+from ..nodriver.nodriver_config import NodriverConfig
 from .base_handler import CachedCredentialHandler, RequestConfig, RequestHandler
 from .direct_handler import DirectRequestHandler
-from .nodriver_handler import NodriverConfig, NodriverRequestHandler
+from .nodriver_handler import NodriverRequestHandler
 from .unflare_handler import UnflareConfig, UnflareRequestHandler
 
 __all__ = [

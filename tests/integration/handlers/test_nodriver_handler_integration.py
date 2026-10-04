@@ -14,12 +14,13 @@ from datetime import date
 
 import pytest
 
-from pro_sports_transactions.handlers import NodriverRequestHandler
+from pro_sports_transactions.handlers import NodriverConfig, NodriverRequestHandler
 from pro_sports_transactions.search import League, Search, TransactionType, headers
 
 URL = (
     "https://www.prosportstransactions.com/basketball/Search/"
     "SearchResults.php?BeginDate=2023-01-01&EndDate=2023-01-31&Submit=Search"
+    "&PlayerMovementChkBx=yes"
 )
 
 # The results table on a real (non-challenge) search page.
@@ -31,11 +32,18 @@ def _skip_reason():
     if importlib.util.find_spec("nodriver") is None:
         return "nodriver extra not installed (uv sync --all-extras)"
     if sys.platform.startswith("linux"):
-        if not (shutil.which("google-chrome") or shutil.which("google-chrome-stable")):
+        if not _chrome_path():
             return "Google Chrome not installed"
         if not os.environ.get("DISPLAY"):
             return "no display - run under xvfb-run"
     return None
+
+
+def _chrome_path():
+    """The Google Chrome binary the skip check found (None elsewhere, letting
+    nodriver auto-detect). Passed explicitly because auto-detect prefers the
+    shortest path, so an installed Chromium would win over Chrome and fail."""
+    return shutil.which("google-chrome") or shutil.which("google-chrome-stable")
 
 
 pytestmark = pytest.mark.skipif(_skip_reason() is not None, reason=str(_skip_reason()))
@@ -48,7 +56,8 @@ class TestNodriverHandlerIntegration:
     @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_solve_then_cached_replay(self):
-        async with NodriverRequestHandler() as handler:
+        config = NodriverConfig(browser_executable_path=_chrome_path())
+        async with NodriverRequestHandler(config) as handler:
             # First call: browser clears the challenge and caches cf_clearance.
             first = await handler.get(URL, headers)
             assert first is not None, "browser solve failed"
