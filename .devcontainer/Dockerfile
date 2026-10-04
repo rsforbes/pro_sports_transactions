@@ -11,7 +11,6 @@ FROM mcr.microsoft.com/devcontainers/python:1-${VARIANT}
 #   detected by Cloudflare and never clears the challenge.
 # - xvfb: virtual display. The challenge is not reliably solved headless, so
 #   run live nodriver code under `xvfb-run` in this display-less container.
-# - libgl1: needed to import opencv-python, which backs nodriver's verify_cf().
 # The base image's Yarn apt source (unused here) has carried an expired signing
 # key that makes `apt-get update` fail, so drop it first.
 # Google ships Linux Chrome for amd64 only; on other architectures (e.g. arm64
@@ -26,7 +25,7 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list \
     fi \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        $CHROME_DEB xvfb xauth libgl1 \
+        $CHROME_DEB xvfb xauth \
     && rm -rf /tmp/chrome.deb /var/lib/apt/lists/*
 
 # Switch from root to the vscode user for security and proper file permissions
