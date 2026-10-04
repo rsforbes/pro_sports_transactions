@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Raised the pandas ceiling to `<4` to allow pandas 3.x; the suite passes at both the `2.2.2` floor and `3.0.3`
 
 ### Fixed
+- `Search` raised `lxml.etree.XMLSyntaxError` when a request handler returned no response (e.g. Cloudflare wasn't cleared), instead of returning an empty result with `errors` set. A regression from wrapping the HTML in `StringIO` for pandas 3: `StringIO(None)` silently becomes an empty document. `get_dataframe()`, `get_dict()`, and `get_json()` now report `ValueError('No response from the request handler')` in `errors`; a non-empty response lxml can't parse (e.g. only a comment) is likewise reported in `errors` instead of raising ([#44](https://github.com/rsforbes/pro_sports_transactions/issues/44))
 - Cached-credential requests merged caller headers and cached headers case-sensitively, so a lowercase `user-agent` from the caller could be sent alongside the cached `User-Agent`, and Cloudflare rejects the mismatched session with 403. Headers are now merged case-insensitively (affects `UnflareRequestHandler` whenever the service returns a `User-Agent` key in a different case than the caller's)
 - `UnflareRequestHandler` no longer raises `TypeError` when the service returns a cookie with `"expires": null`
 - A 403 on a cached-credential request no longer clears credentials that a concurrent refresh stored while the request was in flight

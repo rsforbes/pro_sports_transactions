@@ -362,9 +362,9 @@ uv run pytest tests/performance/handlers/test_unflare_performance.py::test_unfla
 - **Cause**: calling `asyncio.run(...)` inside a Jupyter notebook (or other code that is already running async code).
 - **Solution**: in a notebook, `await` the function directly in the cell, e.g. `df = await search_transactions()`. See [Running the examples in Jupyter](#running-the-examples-in-jupyter).
 
-#### "TypeError: cannot parse from 'NoneType'" errors
-- **Cause**: Requests being blocked by Cloudflare (no bypass handler, or the handler could not clear the challenge)
-- **Solution**: Use a bypass handler — `NodriverRequestHandler` or `UnflareRequestHandler` — instead of default direct requests. If you already use one and this appears only occasionally, retry; see [Handling failures and retries](#handling-failures-and-retries).
+#### Empty results with `errors: ["ValueError('No response from the request handler')"]`
+- **Cause**: The request handler couldn't fetch the page: direct requests blocked by Cloudflare, or a bypass handler couldn't clear the challenge (for Unflare, the service may also be down)
+- **Solution**: Use a bypass handler — `NodriverRequestHandler` or `UnflareRequestHandler` — instead of default direct requests. If you already do and this appears only occasionally, retry; an occasional failed solve is normal. See [Handling failures and retries](#handling-failures-and-retries)
 
 #### nodriver: request returns `None` / challenge never clears
 - **Occasional failure**: a single failed solve can happen; retry it (see [Handling failures and retries](#handling-failures-and-retries)). The causes below apply when it fails consistently.
