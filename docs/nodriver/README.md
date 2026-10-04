@@ -31,7 +31,7 @@
   Each has a small public interface and its own unit tests, so the handler's tests
   replace collaborators instead of patching private methods. Applying the same
   structure to the shipped handlers is tracked in #49.
-- `[nodriver]` optional extra in `pyproject.toml` (`nodriver`, `opencv-python`).
+- `[nodriver]` optional extra in `pyproject.toml` (`nodriver`, `opencv-python-headless`).
   Chrome and (on headless hosts) xvfb are external prerequisites.
 - Unit tests (fully mocked): `tests/unit/nodriver/` (one file per class) and
   `tests/unit/handlers/test_nodriver_handler.py` (orchestration).
@@ -125,8 +125,9 @@ individually necessary; removing any one caused the challenge to loop forever.
 2. **Real Google Chrome** (`/usr/bin/google-chrome-stable`), **not** Chromium. Playwright's
    bundled Chromium failed; real Chrome worked. Unbranded Chromium is detectable.
 3. **Headful under Xvfb** on a headless host (`xvfb-run -a`). Headless failed for every tool.
-4. **`page.verify_cf()`** to click the Turnstile checkbox — requires **`opencv-python`**
-   (verify_cf locates the checkbox via CV template matching). Passive waiting never clears it.
+4. **`page.verify_cf()`** to click the Turnstile checkbox — requires **OpenCV**
+   (verify_cf locates the checkbox via CV template matching; the extra installs
+   `opencv-python-headless`). Passive waiting never clears it.
 
 Result: first verify attempt returned `Basketball Transactions Search Results`, 394 KB,
 27 rows of real data (e.g. `1937-07-01 | Metros (NBL) | Bill Hosket | acquired`).
@@ -153,7 +154,7 @@ async def main():
         html = await page.get_content()
         if "_cf_chl" not in html:  # challenge-only marker (see handler)
             break
-        await page.verify_cf()  # clicks the Turnstile checkbox (needs opencv-python)
+        await page.verify_cf()  # clicks the Turnstile checkbox (needs OpenCV)
         await asyncio.sleep(5)
     print(len(html))
     browser.stop()
@@ -194,7 +195,7 @@ A `NodriverRequestHandler` implementing the existing `RequestHandler` interface:
 ## Dependencies & caveats
 
 - Ships a heavier stack than pure HTTP: a **real Chrome** binary, **Xvfb** (for headless
-  servers), and **opencv-python**. Closer to Playwright's `install-deps` than a plain wheel.
+  servers), and **opencv-python-headless**. Closer to Playwright's `install-deps` than a plain wheel.
 - Per-solve cost: a few seconds and a few hundred MB RAM.
 - It remains an arms race — nodriver / `verify_cf` will need periodic updates as Cloudflare
   changes. This is the maintenance burden Unflare/FlareSolverr currently absorb.
