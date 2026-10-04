@@ -173,3 +173,5 @@ cython_debug/
 
 # Built Visual Studio Code Extensions
 *.vsix
+# SARIF reports from the security scans (see .github/workflows/security.yml)
+*.sarif

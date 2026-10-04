@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python version Trove classifiers (3.11–3.14) advertising the supported release range
 - Dev container persists Claude Code history and memory across rebuilds (named volume on `~/.claude`) and installs the GitHub CLI via the `github-cli` dev container feature
 - Dependabot configuration for weekly uv and GitHub Actions dependency updates (minor/patch bumps grouped, Conventional-Commit PR titles)
+- Security scanning: [Betterleaks](https://github.com/betterleaks/betterleaks) (secrets), [Semgrep](https://semgrep.dev/) (SAST), [actionlint](https://github.com/rhysd/actionlint), and [zizmor](https://docs.zizmor.sh/) (GitHub Actions lint and security audit) run as [pre-commit](https://pre-commit.com/) hooks (`.pre-commit-config.yaml`) from a committed `.githooks/pre-commit` that works both inside the dev container and on the host (enabled by the dev container, or `git config core.hooksPath .githooks`) and in CI; CI also scans the full git history with Betterleaks and runs [Trivy](https://trivy.dev/) over `uv.lock` (including dev dependencies) and the dev container Dockerfile on every pull request (`trivy.yaml`)
+- Security workflow: Trivy and Semgrep run weekly and on every push to `main`, upload findings to GitHub code scanning (Security tab), and open a tracking issue when a run fails
+- Dependabot now also updates the pre-commit hooks, and waits 7 days after a release before proposing it (`cooldown`), so a hijacked release is usually pulled before it reaches a PR; security updates are not delayed
 
 ### Changed
 - `UnflareRequestHandler` cache lifetime now follows the `cf_clearance` cookie's expiry (minus 5 minutes) instead of being capped at 1 hour. Cached credentials are replayed until Cloudflare rejects them (403), which triggers a fresh Unflare solve, so far fewer Unflare calls are made
@@ -30,8 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enabled Ruff's flake8-bugbear (`B`) lint rules to catch likely-bug patterns (e.g. function calls in argument defaults)
 - Upgraded the test stack to pytest 9 (`>=9.0,<10`), pytest-asyncio 1.x (`>=1.3,<2`), and pytest-mock (`>=3.14,<4`); pinned `asyncio_mode = "strict"` to match the suite's explicit `@pytest.mark.asyncio` markers. The full unit suite passes at both the declared floors and the latest versions
 - Raised the pandas ceiling to `<4` to allow pandas 3.x; the suite passes at both the `2.2.2` floor and `3.0.3`
+- GitHub Actions are pinned to full commit SHAs instead of mutable tags, and checkouts no longer persist the job token (`persist-credentials: false`)
 
 ### Fixed
+- Raised the `aiohttp` floor from `>=3.13.3` to `>=3.14.3` (and the locked version from 3.14.1) so no allowed version is affected by CVE-2026-69244 (HIGH: denial of service via malformed HTTP responses), found by the new Trivy scan
 - `Search` raised `lxml.etree.XMLSyntaxError` when a request handler returned no response (e.g. Cloudflare wasn't cleared), instead of returning an empty result with `errors` set. A regression from wrapping the HTML in `StringIO` for pandas 3: `StringIO(None)` silently becomes an empty document. `get_dataframe()`, `get_dict()`, and `get_json()` now report `ValueError('No response from the request handler')` in `errors`; a non-empty response lxml can't parse (e.g. only a comment) is likewise reported in `errors` instead of raising ([#44](https://github.com/rsforbes/pro_sports_transactions/issues/44))
 - Cached-credential requests merged caller headers and cached headers case-sensitively, so a lowercase `user-agent` from the caller could be sent alongside the cached `User-Agent`, and Cloudflare rejects the mismatched session with 403. Headers are now merged case-insensitively (affects `UnflareRequestHandler` whenever the service returns a `User-Agent` key in a different case than the caller's)
 - `UnflareRequestHandler` no longer raises `TypeError` when the service returns a cookie with `"expires": null`

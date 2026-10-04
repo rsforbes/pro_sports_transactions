@@ -11,6 +11,22 @@
 # a too-low floor (e.g. the pandas/numpy 2 ABI break) fails here instead of in a
 # user's install.
 #
+# Security scanning:
+# - `pre-commit` runs every hook in .pre-commit-config.yaml (Semgrep SAST,
+#   actionlint, zizmor) over the whole tree, so CI enforces exactly what the
+#   local hooks check.
+# - `betterleaks` scans the full git history for secrets (the local hook only
+#   sees staged changes).
+# - `trivy` scans uv.lock for vulnerable dependencies and the Dockerfile for
+#   misconfigurations (config in trivy.yaml).
+# Trivy and Semgrep also run weekly and on every push to main (security.yml),
+# which uploads their findings to the Security tab and opens an issue when a
+# run fails.
+#
+# Every action is pinned to a full commit SHA (tag in a trailing comment), not
+# a mutable tag: in March 2026 an attacker repointed 76 of trivy-action's 77
+# tags at credential-stealing code. Dependabot keeps the SHAs current.
+#
 # `ci` is an aggregate gate job: make THIS the required status check in branch
 # protection. It reports a single stable name ("CI") regardless of how many jobs
 # or matrix legs exist, so changing them never breaks branch protection config.
@@ -29,8 +45,10 @@ jobs:
     name: Lint (ruff)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           python-version: '3.11'
       - name: Install dependencies
@@ -49,8 +67,10 @@ jobs:
       matrix:
         python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -63,8 +83,10 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           python-version: '3.11'
       - name: Install lowest allowed direct dependencies
@@ -72,17 +94,100 @@ jobs:
       - name: Test
         run: uv run pytest
 
+  pre-commit:
+    name: Pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          python-version: '3.11'
+      # Only the dev group (pre-commit itself): the hooks run in their own
+      # environments, so the package and its runtime deps aren't needed.
+      - name: Install dependencies
+        run: uv sync --frozen --only-dev
+      # The Python hook envs (Semgrep, zizmor) link to this interpreter, so the
+      # cache key includes its version: otherwise a Python patch bump restores
+      # broken envs that pre-commit rebuilds on every run, and an exact key hit
+      # never re-saves the cache.
+      - name: Get Python version
+        id: python
+        run: echo "version=$(uv run --frozen --only-dev python -c 'import sys; print(sys.version.split()[0])')" >> "$GITHUB_OUTPUT"
+      - name: Cache hook environments
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-py${{ steps.python.outputs.version }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      # The betterleaks hook only scans staged changes, so it has nothing to do
+      # here; the `betterleaks` job below scans the full history instead.
+      - name: Run hooks on all files
+        run: uv run --frozen --only-dev pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: betterleaks
+          # Enables zizmor's online audits (e.g. that each pinned SHA belongs to
+          # the repo it claims). Read-only: the workflow grants contents: read.
+          GH_TOKEN: ${{ github.token }}
+
+  betterleaks:
+    name: Secrets (Betterleaks)
+    runs-on: ubuntu-latest
+    env:
+      # Keep in step with the betterleaks rev in .pre-commit-config.yaml (the
+      # first step fails the job when they differ, e.g. after a Dependabot hook
+      # bump). To bump: update both, and take the linux_x64 sha256 from the
+      # release's checksums.txt.
+      BETTERLEAKS_VERSION: 1.9.0
+      BETTERLEAKS_SHA256: f8b185a39ffcece2a1ca82bf3a4e7435cd81963ffd16b7a9128daf75f35f6de7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # full history: a secret removed in a later commit is still leaked
+      - name: Check version matches the pre-commit hook
+        run: |
+          if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
+              | grep -q "# frozen: v${BETTERLEAKS_VERSION}\$"; then
+            echo "::error::BETTERLEAKS_VERSION (${BETTERLEAKS_VERSION}) does not match the betterleaks rev in .pre-commit-config.yaml; bump BETTERLEAKS_VERSION and BETTERLEAKS_SHA256"
+            exit 1
+          fi
+      - name: Install Betterleaks
+        run: |
+          tarball="betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/${tarball}"
+          echo "${BETTERLEAKS_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" betterleaks
+      - name: Scan git history
+        run: ./betterleaks git --redact --verbose --no-banner .
+
+  trivy:
+    name: Vulnerabilities (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Scan dependencies and Dockerfile
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          trivy-config: trivy.yaml
+          version: v0.75.0
+
   # Aggregate gate for branch protection. Passes when every job succeeded or was
   # skipped; fails otherwise. Set this ("CI") as the required status check.
   ci:
     name: CI
     if: always()
-    needs: [lint, test, lowest-direct]
+    needs: [lint, test, lowest-direct, pre-commit, betterleaks, trivy]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all jobs passed
         run: |
-          for r in ${{ needs.lint.result }} ${{ needs.test.result }} ${{ needs.lowest-direct.result }}; do
+          for r in ${{ needs.lint.result }} ${{ needs.test.result }} ${{ needs.lowest-direct.result }} \
+                   ${{ needs.pre-commit.result }} ${{ needs.betterleaks.result }} ${{ needs.trivy.result }}; do
             if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
               echo "Job failed: $r"
               exit 1
