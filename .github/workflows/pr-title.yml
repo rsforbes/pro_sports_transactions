@@ -7,7 +7,7 @@
 # Runs as `pull_request_target` so it also validates forked / Dependabot PRs;
 # it only reads the title and never checks out PR code, so this is safe.
 name: PR Title
-on:
+on: # zizmor: ignore[dangerous-triggers] -- only reads the PR title; never checks out PR code
   pull_request_target:
     types: [opened, edited, synchronize, reopened]
 permissions:
@@ -17,6 +17,6 @@ jobs:
     name: Validate conventional title
     runs-on: ubuntu-latest
     steps:
-      - uses: amannn/action-semantic-pull-request@v6
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

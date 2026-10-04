@@ -1,0 +1,70 @@
+# pre-commit hooks — run automatically on `git commit` from the committed
+# .githooks/pre-commit once enabled with `git config core.hooksPath .githooks`
+# (the dev container does this in post-create; don't use `pre-commit install`,
+# see CONTRIBUTING.md). Run every hook against the whole tree with
+# `uv run pre-commit run --all-files`.
+#
+# CI runs this same file (see the `pre-commit` job in .github/workflows/ci.yml),
+# so the hooks are the single source of truth for the rules: what passes
+# locally passes in CI. Hooks are a fast local check only — `git commit
+# --no-verify` skips them — so CI is what actually enforces them.
+#
+# Hook revs are pinned to full commit SHAs (with the tag in a trailing comment),
+# not tags: tags are mutable and can be repointed at malicious code, as in the
+# March 2026 trivy-action compromise. Dependabot's `pre-commit` ecosystem keeps
+# the SHAs current (see .github/dependabot.yml).
+#
+# Trivy is deliberately not a hook: its results depend on a vulnerability
+# database that changes daily, so a newly published CVE would block unrelated
+# commits. It runs in CI and on a weekly schedule instead (see trivy.yaml).
+repos:
+  # Secrets: scans only what is being committed (`--staged`), so it is quick.
+  # CI additionally scans the full git history. language: golang — pre-commit
+  # builds the binary on first use and installs a Go toolchain itself if none
+  # is present, so nothing extra is needed locally.
+  # False positives: add the finding's fingerprint to .betterleaksignore, or a
+  # `betterleaks:allow` comment on the line.
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: 81aff7a638638aae3a659845d089043e1d8fe9ac # frozen: v1.9.0
+    hooks:
+      - id: betterleaks
+
+  # SAST: scans the staged files with Semgrep Community Edition rulesets from
+  # the Semgrep Registry (fetched at run time; no account or token needed).
+  # --metrics=off stops Semgrep sending usage metrics; --error makes findings
+  # fail the hook. False positives: `# nosemgrep: <rule-id>` with a reason.
+  # require_serial: one Semgrep process for all files, instead of one per CPU
+  # each fetching and compiling the rulesets.
+  - repo: https://github.com/semgrep/pre-commit
+    rev: 4ff553594543409411f3fe5c1a618910dadd1d6f # frozen: v1.179.0
+    hooks:
+      - id: semgrep
+        types_or: [python, yaml, dockerfile]
+        require_serial: true
+        args:
+          - --config=p/python
+          - --config=p/security-audit
+          - --config=p/github-actions
+          - --config=p/dockerfile
+          - --metrics=off
+          - --error
+          - --quiet
+          - --disable-version-check
+
+  # GitHub Actions workflow linter: YAML/expression errors, invalid inputs,
+  # shellcheck on `run:` scripts. Builds with Go, like betterleaks.
+  - repo: https://github.com/rhysd/actionlint
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca # frozen: v1.7.12
+    hooks:
+      - id: actionlint
+
+  # GitHub Actions security audit: template injection, credential persistence,
+  # dangerous triggers, unpinned actions, excessive permissions. Also audits
+  # dependabot.yml and this file. With a GitHub token in GH_TOKEN (as in CI) it
+  # adds online audits, e.g. that each pinned SHA really belongs to its repo;
+  # without one it runs the offline audits only. False positives:
+  # `# zizmor: ignore[<audit>]` on the flagged line.
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: fa412071e4f5d44d44f9e365f4676f9df92456a2 # frozen: v1.30.1
+    hooks:
+      - id: zizmor

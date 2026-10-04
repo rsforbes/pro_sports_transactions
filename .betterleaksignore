@@ -1,0 +1,7 @@
+# Betterleaks findings reviewed and confirmed as false positives, one
+# fingerprint per line (<commit>:<path>:<rule-id>:<line>). Get a finding's
+# fingerprint from `betterleaks git -f json -r - .`.
+
+# Placeholder credentials ('your_deathbycaptcha_password') in a copy of the
+# upstream cloudscraper README, in a since-deleted archived doc.
+46fad4c1a7503d7110aeb9345a5572ca91b5867d:docs/cloudscraper/archive/cloudscraper.md:generic-password:1016

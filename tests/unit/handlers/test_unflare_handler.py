@@ -251,7 +251,7 @@ class TestUnflareHandler:
                 )
 
         assert result is None
-        assert "Credentialed request failed with status 503" in caplog.text
+        assert "Cached-session request failed with status 503" in caplog.text
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -282,7 +282,7 @@ class TestUnflareHandler:
                 result = await handler._try_cached_request("http://example.com", {})
 
         assert result is None
-        assert "Credentialed request failed with status 500" in caplog.text
+        assert "Cached-session request failed with status 500" in caplog.text
 
     @pytest.mark.unit
     @pytest.mark.asyncio

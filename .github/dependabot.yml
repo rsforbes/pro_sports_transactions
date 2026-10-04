@@ -1,7 +1,9 @@
 # Dependabot configuration.
 #
-# Two ecosystems: the uv-managed Python dependencies (pyproject.toml + uv.lock
-# at the repo root) and the GitHub Actions used in workflows.
+# Three ecosystems: the uv-managed Python dependencies (pyproject.toml + uv.lock
+# at the repo root), the GitHub Actions used in workflows, and the hooks in
+# .pre-commit-config.yaml. Actions and hooks are pinned to commit SHAs with the
+# version in a trailing comment; Dependabot updates both the SHA and the comment.
 #
 # commit-message matters here: this repo enforces Conventional Commits on PR
 # titles (see .github/workflows/pr-title.yml), and Dependabot's default
@@ -10,6 +12,11 @@
 # so Dependabot emits "<prefix>(deps): bump ..." for runtime deps and
 # "<prefix>(deps-dev): bump ..." for dev-group deps — both valid Conventional
 # Commit titles that pass the check.
+#
+# cooldown: wait 7 days after a release before proposing it. Hijacked releases
+# (e.g. the malicious Trivy 0.69.4 in March 2026) are usually caught and pulled
+# within days, so this keeps them out of PRs. It applies to version updates
+# only; Dependabot security updates for known CVEs are not delayed.
 version: 2
 updates:
   # Python dependencies managed by uv.
@@ -17,6 +24,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     commit-message:
       prefix: "build"
@@ -34,9 +43,27 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci"
       include: "scope"
     groups:
       actions:
+        patterns: ["*"]
+
+  # Hooks in .pre-commit-config.yaml (Betterleaks, Semgrep). When the
+  # betterleaks rev moves, bump BETTERLEAKS_VERSION/BETTERLEAKS_SHA256 in
+  # .github/workflows/ci.yml to match (the `betterleaks` job fails until then).
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      pre-commit-hooks:
         patterns: ["*"]

@@ -1,0 +1,24 @@
+# Trivy configuration — read automatically by `trivy fs .` run from the repo
+# root, and passed to the CI and weekly scans (.github/workflows/ci.yml and
+# security.yml), so local and CI scans agree.
+#
+# Scans uv.lock for known-vulnerable dependencies and the dev container
+# Dockerfile for misconfigurations. Dev dependencies (pytest, pre-commit, ...)
+# are included: Trivy skips them by default, but they run in CI and the dev
+# container too. Secret scanning is left to Betterleaks.
+# Only HIGH/CRITICAL findings that already have a fixed release fail the scan,
+# so every failure is actionable by upgrading.
+#
+# To accept a finding, add its ID to a .trivyignore file with a reason.
+scan:
+  scanners:
+    - vuln
+    - misconfig
+severity:
+  - HIGH
+  - CRITICAL
+vulnerability:
+  ignore-unfixed: true
+pkg:
+  include-dev-deps: true
+exit-code: 1

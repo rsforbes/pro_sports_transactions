@@ -1,0 +1,151 @@
+# Security scans of main, reported to GitHub code scanning.
+#
+# The CI workflow gates every pull request on the same scans; this workflow
+# covers what PR checks can't:
+# - Weekly: new CVEs are published against dependencies that haven't changed,
+#   and the Semgrep Registry rulesets change over time, so a tree that was
+#   clean at merge can start failing with no commit at all.
+# - On push to main: keeps the Security tab current after each merge.
+#
+# Results are uploaded as SARIF, so findings appear in the repository's
+# Security > Code scanning tab with history, and close there once fixed.
+# Uploading happens here rather than in CI because pull requests from forks
+# get a read-only token that can't upload.
+#
+# If a scheduled or push run fails, `report-failure` opens an issue (or
+# comments on the open one), so a failure on main doesn't go unseen. Fix it by
+# upgrading the flagged package (`uv lock --upgrade-package <name>`), fixing
+# the code, or recording an accepted risk (see CONTRIBUTING.md).
+#
+# Settings: Trivy reads trivy.yaml; Semgrep reads its version and rules from
+# the semgrep hook in .pre-commit-config.yaml. Both are shared with CI and
+# local runs, so every scan agrees.
+
+name: Security
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 13 * * 1' # Mondays 13:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  trivy:
+    name: Vulnerabilities (Trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Scan dependencies and Dockerfile
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          trivy-config: trivy.yaml
+          version: v0.75.0
+          format: sarif
+          output: trivy.sarif
+      # Upload even when the scan failed (findings exit 1) so they show up.
+      - name: Upload to code scanning
+        if: ${{ !cancelled() && hashFiles('trivy.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  semgrep:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: uv sync --frozen --only-dev
+      # Same Semgrep version, arguments, and files as the pre-commit hook (its
+      # types_or applied to the tracked files, as pre-commit does), read from
+      # .pre-commit-config.yaml so the two can't drift apart. Any parse error
+      # fails the step instead of running Semgrep with no rules.
+      - name: Scan
+        run: |
+          uv run --frozen --only-dev python - <<'EOF'
+          import os
+          import re
+          import subprocess
+
+          import yaml
+          from identify.identify import tags_from_path
+
+          with open(".pre-commit-config.yaml") as f:
+              text = f.read()
+          version = re.search(
+              r"repo: https://github\.com/semgrep/pre-commit\n"
+              r"\s+rev: \S+ # frozen: v([0-9][0-9.]*)\n",
+              text,
+          ).group(1)
+          hook = next(
+              h
+              for r in yaml.safe_load(text)["repos"]
+              for h in r.get("hooks", [])
+              if h["id"] == "semgrep"
+          )
+          types_or = set(hook["types_or"])
+          tracked = subprocess.run(
+              ["git", "ls-files", "-z"], capture_output=True, text=True, check=True
+          ).stdout.split("\0")
+          files = []
+          for path in tracked:
+              if path and os.path.lexists(path):
+                  tags = tags_from_path(path)
+                  if "file" in tags and tags & types_or:
+                      files.append(path)
+          print(f"semgrep {version}: {' '.join(hook['args'])} ({len(files)} files)", flush=True)
+          cmd = ["uvx", f"semgrep=={version}", "scan", *hook["args"], "--sarif-output=semgrep.sarif", *files]
+          os.execvp(cmd[0], cmd)
+          EOF
+      - name: Upload to code scanning
+        if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  report-failure:
+    name: Report failure
+    needs: [trivy, semgrep]
+    # Manual runs have someone watching; scheduled and push runs may not.
+    if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          title="Security scan failing on main"
+          body="The \`Security\` workflow failed on a ${EVENT} run: ${RUN_URL}
+
+          Findings are in the run log and under Security > Code scanning. Fix by upgrading the flagged package (\`uv lock --upgrade-package <name>\`), fixing the code, or recording an accepted risk (see CONTRIBUTING.md). Close this issue once the workflow passes again."
+          existing=$(gh issue list --state open --search "\"${title}\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

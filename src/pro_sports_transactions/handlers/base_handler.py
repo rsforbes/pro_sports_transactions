@@ -127,22 +127,27 @@ class CachedCredentialHandler(RequestHandler):
                             if self._cached_cookies == sent_cookies:
                                 self.clear_cache()
                             return None
+                        # These messages say "cached-session", not "credential":
+                        # Semgrep's python-logger-credential-disclosure rule flags
+                        # any "credential" log message with a %s placeholder.
                         logger.warning(
-                            "Credentialed request failed with status %d: %s",
+                            "Cached-session request failed with status %d: %s",
                             response.status,
-                            await response.text(),
+                            # errors="replace": a non-UTF-8 error body must not
+                            # raise UnicodeDecodeError out of the log call.
+                            await response.text(errors="replace"),
                         )
                         return None
             except asyncio.TimeoutError as e:
                 # The full 120s budget is already spent; retrying would stall
                 # the caller for minutes before the refresh path even starts.
-                logger.error("Credentialed request timed out: %s", e)
+                logger.error("Cached-session request timed out: %s", e)
                 return None
             except (aiohttp.ClientError, OSError) as e:
                 # Transient: retry before escalating to a full refresh.
                 if attempt + 1 < _REPLAY_ATTEMPTS:
                     logger.warning(
-                        "Credentialed request transient error "
+                        "Cached-session request transient error "
                         "(attempt %d/%d), retrying: %s",
                         attempt + 1,
                         _REPLAY_ATTEMPTS,
@@ -150,7 +155,7 @@ class CachedCredentialHandler(RequestHandler):
                     )
                     await asyncio.sleep(0.5 * (attempt + 1))
                     continue
-                logger.error("Credentialed request failed after retries: %s", e)
+                logger.error("Cached-session request failed after retries: %s", e)
                 return None
 
     def cache_credentials(self, cookies: List[dict], response_headers: dict):

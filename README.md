@@ -457,10 +457,16 @@ uv run ruff format .
 
 # Lint (and auto-fix where possible)
 uv run ruff check --fix .
+
+# Pre-commit hooks (secrets, SAST, workflow lint and audit) over the whole tree
+uv run pre-commit run --all-files
 ```
 
+Commits are checked by Betterleaks, Semgrep, actionlint, and zizmor pre-commit
+hooks, and CI also scans dependencies with Trivy. See [CONTRIBUTING.md](CONTRIBUTING.md#pre-commit-hooks).
+
 ## Contributing
-1. Install dependencies: `uv sync --group dev`
+1. Install dependencies and enable the git hooks: `uv sync --group dev && git config core.hooksPath .githooks`
 2. Run tests: `uv run pytest`
 3. Format code: `uv run ruff format .`
 4. Lint code: `uv run ruff check .`
@@ -473,7 +479,7 @@ Pro Sports Transactions presents data in an HTML table. To make retrieval easy, 
 
 ## Runtime Dependencies
 - python >=3.11
-- aiohttp >=3.13.3,<4
+- aiohttp >=3.14.3,<4
 - pandas >=2.2.2,<4
 - brotli >=1.2.0,<2
 - lxml >=4.9.2,<7.0.0
@@ -488,6 +494,7 @@ Install with `pip install pro_sports_transactions[nodriver]` to use `NodriverReq
 Also required, but not pip-installable: a **Chromium-based browser** (Google Chrome is the tested, recommended choice; see [Supported browsers](#supported-browsers)), and a virtual display (e.g. `xvfb`) on headless hosts.
 
 ## Development Dependencies
+- pre-commit >=4.6,<5
 - pytest >=9.0,<10
 - pytest-asyncio >=1.3,<2
 - pytest-mock >=3.14,<4
