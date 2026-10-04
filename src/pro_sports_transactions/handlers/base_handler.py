@@ -48,6 +48,10 @@ class CachedCredentialHandler(RequestHandler):
         self._cached_cookies: Optional[str] = None
         self._cached_headers: Optional[Dict[str, str]] = None
         self._cache_expiry: float = 0
+        # Bumped on every cache_credentials() call, so "are these still the
+        # credentials I used?" works even for cookie-less sessions, whose
+        # cookie string (None) is identical across solves.
+        self._cache_generation: int = 0
 
     async def get(self, url: str, headers: Dict[str, str]) -> Optional[str]:
         # Fast path: replay cached credentials if they are still valid.
@@ -94,10 +98,12 @@ class CachedCredentialHandler(RequestHandler):
         # Snapshot the credentials this request uses, so a 403 only clears the
         # cache if it still holds these same (stale) credentials - not fresh ones
         # a concurrent refresh stored while this request was in flight.
+        sent_generation = self._cache_generation
         sent_cookies = self._cached_cookies
+        sent_headers = self._cached_headers
         fixed = {"Accept-Encoding": "gzip, deflate, br"}
-        if self._cached_cookies:
-            fixed["Cookie"] = self._cached_cookies
+        if sent_cookies:
+            fixed["Cookie"] = sent_cookies
         # Merge case-insensitively, later layers winning: callers pass lowercase
         # keys (e.g. the search module's "user-agent"), and a plain dict merge
         # would keep both it and the cached "User-Agent", sending two UA headers.
@@ -105,7 +111,7 @@ class CachedCredentialHandler(RequestHandler):
         # rejects with 403. The same applies between the cached headers (e.g. an
         # Unflare "accept-encoding"/"cookie") and the fixed overrides.
         final_headers: Dict[str, str] = {}
-        for layer in (headers, self._cached_headers, fixed):
+        for layer in (headers, sent_headers, fixed):
             layer_keys = {k.lower() for k in layer}
             final_headers = {
                 k: v for k, v in final_headers.items() if k.lower() not in layer_keys
@@ -124,7 +130,7 @@ class CachedCredentialHandler(RequestHandler):
                         if response.status == 403:
                             # Cloudflare rejected the session - credentials stale
                             logger.warning("Session credentials rejected (403)")
-                            if self._cached_cookies == sent_cookies:
+                            if self._cache_generation == sent_generation:
                                 self.clear_cache()
                             return None
                         # These messages say "cached-session", not "credential":
@@ -176,6 +182,7 @@ class CachedCredentialHandler(RequestHandler):
         )
 
         self._cached_headers = response_headers
+        self._cache_generation += 1
 
         # Anchor validity on cf_clearance specifically - it is the cookie that
         # gates access. Keying off it (rather than the min or max over all
