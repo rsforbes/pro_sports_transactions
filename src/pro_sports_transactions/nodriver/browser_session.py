@@ -34,7 +34,7 @@ class BrowserSession:
         # reaches the caller instead of being swallowed by a handler's
         # None-on-failure contract later.
         self.nodriver = self.import_nodriver()
-        self._browser = LoopBound(
+        self._browsers = LoopBound(
             self._launch,
             self._stop,
             self._alive,
@@ -54,16 +54,16 @@ class BrowserSession:
     @property
     def is_running(self) -> bool:
         """True while a launched browser process is alive."""
-        browser = self._browser.resource
+        browser = self._browsers.resource
         return browser is not None and self._alive(browser)
 
     async def browser(self):
         """A live browser on the running event loop, launching one if needed."""
-        return await self._browser.get()
+        return await self._browsers.get()
 
     async def close(self):
         """Stop the browser (if any) and free its resources."""
-        await self._browser.close()
+        await self._browsers.close()
 
     async def _launch(self):
         return await self.nodriver.start(

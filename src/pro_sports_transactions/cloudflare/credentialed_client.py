@@ -38,7 +38,8 @@ class CredentialedClient:
     Requests share one ``aiohttp`` session, so they reuse connections instead
     of paying a TCP + TLS handshake each. The session belongs to the event
     loop that created it; each ``asyncio.run()`` creates a new loop, so a
-    loop change replaces it (see :class:`~pro_sports_transactions.concurrency.LoopBound`).
+    loop change replaces it (see
+    :class:`~pro_sports_transactions.concurrency.LoopBound`).
     :meth:`close` releases it; a later request opens a new one.
 
     Attributes:
@@ -53,7 +54,7 @@ class CredentialedClient:
             raise ValueError(f"attempts must be at least 1, got {attempts}")
         self.timeout = timeout
         self.attempts = attempts
-        self._session = LoopBound(
+        self._sessions = LoopBound(
             self._open_session,
             lambda session: session.close(),
             lambda session: not session.closed,
@@ -62,7 +63,7 @@ class CredentialedClient:
 
     async def close(self):
         """Close the shared session (if any)."""
-        await self._session.close()
+        await self._sessions.close()
 
     @staticmethod
     async def _open_session() -> aiohttp.ClientSession:
@@ -126,7 +127,7 @@ class CredentialedClient:
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         for attempt in range(self.attempts):
             try:
-                session = await self._session.get()
+                session = await self._sessions.get()
                 async with session.get(
                     url, headers=headers, timeout=timeout
                 ) as response:
