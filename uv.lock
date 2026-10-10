@@ -1029,7 +1029,7 @@ wheels = [
 
 [[package]]
 name = "pro-sports-transactions"
-version = "1.1.2"
+version = "1.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
