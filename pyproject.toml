@@ -67,7 +67,7 @@ dependencies = [
 # such as xvfb. OpenCV backs nodriver's verify_cf() Turnstile-checkbox
 # detection; the headless build is used because verify_cf() only does template
 # matching, so the GUI build's system libraries (libGL) aren't needed. See
-# docs/nodriver/README.md.
+# docs/nodriver.md.
 nodriver = [
   "nodriver>=0.50,<1",
   "opencv-python-headless>=4.9,<5",

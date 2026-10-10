@@ -2,6 +2,83 @@
 
 Thanks for contributing to `pro_sports_transactions`!
 
+## Development setup
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management and
+[Ruff](https://docs.astral.sh/ruff/) for formatting and linting.
+
+Install dependencies and enable the git hooks:
+
+```bash
+uv sync --group dev && git config core.hooksPath .githooks
+```
+
+Then see [Testing](#testing) and [Code Quality](#code-quality) for the commands
+to run before opening a pull request.
+
+The development dependencies (pytest, pytest-asyncio, pytest-mock, Ruff,
+pre-commit) and their version ranges are listed under `[dependency-groups] dev`
+in [`pyproject.toml`](pyproject.toml).
+
+## Testing
+
+The library includes comprehensive test suites with different categories:
+
+### Running Tests
+```bash
+# Run all unit tests (default)
+uv run pytest
+
+# Run integration tests (requires external services)
+uv run pytest tests/integration/ -m integration
+
+# Run performance tests
+uv run pytest tests/performance/ -m performance
+
+# Run all tests
+uv run pytest tests/ -m "unit or integration or performance"
+
+# Run tests with coverage
+# (pytest-cov isn't a dev dependency; --with adds it for this run)
+uv run --with pytest-cov pytest --cov=src/pro_sports_transactions
+```
+
+### Test Categories
+- **Unit Tests**: Fast, isolated tests of individual components
+- **Integration Tests**: Tests requiring external services (may be skipped if services unavailable)
+- **Performance Tests**: Benchmarks with configurable thresholds from `pyproject.toml`
+
+### Performance Testing
+
+The library includes built-in performance testing capabilities with configurable thresholds:
+
+```toml
+# Configure performance thresholds in pyproject.toml
+[tool.performance-thresholds]
+unflare_cache_hit_speedup = 10.0  # Cache hits should be 10x faster than misses
+direct_request_timeout = 5.0       # Direct requests should timeout within 5s
+unflare_first_request_max = 30.0  # First Unflare request max time in seconds
+```
+
+Run a specific performance test:
+```bash
+uv run pytest tests/performance/handlers/test_unflare_performance.py::test_unflare_cache_speedup
+```
+
+## Code Quality
+The project maintains high code quality standards:
+
+```bash
+# Format code
+uv run ruff format .
+
+# Lint (and auto-fix where possible)
+uv run ruff check --fix .
+
+# Pre-commit hooks (secrets, SAST, workflow lint and audit) over the whole tree
+uv run pre-commit run --all-files
+```
+
 ## Pre-commit hooks
 
 Each commit is checked by [pre-commit](https://pre-commit.com/) hooks defined in

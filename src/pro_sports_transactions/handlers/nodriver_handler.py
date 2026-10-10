@@ -13,7 +13,7 @@ Chrome is the tested choice)::
 
 On a headless host, run the process under a virtual display (e.g. ``xvfb-run``);
 Cloudflare's managed challenge is not reliably solved by headless Chrome. See
-``docs/nodriver/README.md``. The pieces this handler is assembled from live in
+``docs/nodriver.md``. The pieces this handler is assembled from live in
 :mod:`pro_sports_transactions.nodriver`.
 """
 
