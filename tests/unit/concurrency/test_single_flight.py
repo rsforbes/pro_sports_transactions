@@ -100,6 +100,34 @@ class TestSingleFlight:
         await SingleFlight().close()
 
     @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_wait_lets_the_job_finish(self):
+        flight, job = SingleFlight(), Job()
+
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(flight.run(job), 0.001)
+        task = flight.task
+
+        await flight.wait()
+
+        assert task.done() and not task.cancelled()
+        assert task.result() == 1
+        await flight.wait()  # nothing running: returns at once
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_wait_gives_up_after_its_timeout(self):
+        flight, release = SingleFlight(), asyncio.Event()
+        running = asyncio.ensure_future(flight.run(release.wait))
+        await asyncio.sleep(0)  # the job has started
+
+        assert await flight.wait(timeout=0.01) is False
+        assert not flight.task.done()  # left running, not cancelled
+        release.set()
+        assert await flight.wait() is True
+        await running
+
+    @pytest.mark.unit
     def test_a_new_event_loop_does_not_join_a_job_from_a_closed_one(self):
         """One SingleFlight across event loops: a job left on an earlier
         (closed) loop must not be awaited by the next."""

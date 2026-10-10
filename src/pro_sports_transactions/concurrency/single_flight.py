@@ -60,15 +60,29 @@ class SingleFlight(Generic[T]):
                 return None, started
             raise
 
+    async def wait(self, timeout: Optional[float] = None) -> bool:
+        """Await a job still running on this event loop, without cancelling it.
+
+        Returns ``False`` if ``timeout`` seconds passed with the job still
+        running (it keeps running), else ``True``.
+        """
+        return await self._finish(cancel=False, timeout=timeout)
+
     async def close(self):
         """Cancel and await a job still running on this event loop."""
+        await self._finish(cancel=True)
+
+    async def _finish(self, cancel: bool, timeout: Optional[float] = None) -> bool:
         task = self._task
         if (
             task is not None
             and not task.done()
             and task.get_loop() is asyncio.get_running_loop()
         ):
-            task.cancel()
+            if cancel:
+                task.cancel()
             # wait(), not await: the job's outcome is not ours to raise, but a
-            # cancellation of close() itself still propagates.
-            await asyncio.wait([task])
+            # cancellation of the caller itself still propagates.
+            done, _ = await asyncio.wait([task], timeout=timeout)
+            return bool(done)
+        return True
