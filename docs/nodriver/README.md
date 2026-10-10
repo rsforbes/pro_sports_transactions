@@ -98,6 +98,14 @@ lowercase `user-agent` cannot ride along with the cached `User-Agent`.
   reuse connections instead of paying a TCP + TLS handshake each. Like the
   browser, it belongs to one event loop and is replaced on a loop change; the
   handler's `close()` releases it.
+- `LoopBound` runs an open (a browser launch, a session) as one task shared by
+  every caller (#69). A solve timeout or `close()` that cancels a caller mid-launch
+  leaves the browser stored, so `close()` still stops it; concurrent callers
+  launch one browser, not one each; and a `close()` during an open waits for it
+  and closes what it opened. That wait is capped (`LoopBound.close_timeout`,
+  30s), so a launch that never answers cannot hang `close()` or a timed-out
+  solve; the launch still stops its browser if it finishes while the event loop
+  is running, and the next call launches a fresh one rather than wait on it.
 
 Known rough edges / deferred:
 - On interpreter/loop shutdown nodriver can emit a benign "Event loop is closed"
