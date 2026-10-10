@@ -114,14 +114,11 @@ target-version = "py311"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-# E/W pycodestyle, F pyflakes, I isort — mirrors what the prior
-# black + flake8 + isort stack actually enforced. B is flake8-bugbear (likely
-# bug patterns); it was listed in the old .flake8 select but the plugin was
-# never installed, so it never actually ran until now. E203 and E501 are owned
-# by the formatter (line wrapping), so they're disabled here to avoid
-# double-reporting.
-select = ["E", "F", "W", "I", "B"]
-ignore = ["E203", "E501"]
+# Listed explicitly, so a ruff upgrade cannot switch on new rules by itself.
+# E4/E7/E9 + F: pycodestyle's error checks and pyflakes (the formatter owns
+# style, so pycodestyle's style rules stay off). I: import order (isort).
+# B: flake8-bugbear, likely bugs such as mutable default arguments.
+select = ["E4", "E7", "E9", "F", "I", "B"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["pro_sports_transactions"]

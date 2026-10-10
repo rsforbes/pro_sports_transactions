@@ -11,10 +11,8 @@
     "python.analysis.extraPaths": [
         "${workspaceFolder}/src"
     ],
-    "python.defaultInterpreterPath": ".venv/bin/python",
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
     "python.analysis.diagnosticSeverityOverrides": {
-        "reportUnboundVariable": "information",
-        "reportImplicitStringConcatenation": "warning",
-        "reportUntypedFunctionDecorator": "information"
+        "reportUnboundVariable": "information"
     }
 }
