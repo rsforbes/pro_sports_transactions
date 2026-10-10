@@ -1,6 +1,7 @@
 """Unit tests for BrowserSession."""
 
 import asyncio
+import logging
 import sys
 from unittest.mock import AsyncMock, patch
 
@@ -49,7 +50,9 @@ class TestBrowserSession:
         browser.stop.assert_not_called()
 
     @pytest.mark.unit
-    def test_new_event_loop_relaunches_browser(self, fake_nodriver, make_fake_browser):
+    def test_new_event_loop_relaunches_browser(
+        self, fake_nodriver, make_fake_browser, caplog
+    ):
         """Each asyncio.run() makes a new loop and closes it on exit. A browser
         launched on an earlier loop has a dead connection (observed live to hang
         get()), so a later loop must stop it and launch a new one."""
@@ -59,10 +62,13 @@ class TestBrowserSession:
         session = BrowserSession(NodriverConfig())
 
         assert asyncio.run(session.browser()) is first
-        assert asyncio.run(session.browser()) is second
+        with caplog.at_level(logging.INFO):
+            assert asyncio.run(session.browser()) is second
 
         first.stop.assert_called_once()  # old-loop browser shut down
         assert fake_nodriver.start.await_count == 2
+        # A relaunch is slow, so it is logged where users will see it.
+        assert "event loop changed; replacing the browser" in caplog.text
 
     @pytest.mark.unit
     @pytest.mark.asyncio

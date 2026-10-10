@@ -13,10 +13,13 @@
   implement only their service-specific `_solve`. It is built from pieces in
   `cloudflare/` that any credential source (Playwright, FlareSolverr, ...) can
   reuse: `CredentialCache` (cookies + headers, expiry anchored on
-  `cf_clearance`), `CredentialedClient` (one plain-HTTP request: header merge,
-  transient retries, rejection vs site failure), and `SingleFlight` (#47: at
+  `cf_clearance`) and `CredentialedClient` (one plain-HTTP request: header
+  merge, transient retries, rejection vs site failure). General asyncio helpers
+  with no Cloudflare knowledge live in `concurrency/`: `SingleFlight` (#47: at
   most one solve at a time, shared by every request that needs it, along with
-  its credentials, failure, or exception).
+  its credentials, failure, or exception) and `LoopBound` (#67: a resource
+  that belongs to one event loop, such as the browser or the shared `aiohttp`
+  session, replaced when a new loop shows up).
 - `NodriverRequestHandler` (`handlers/nodriver_handler.py`) — the user-facing
   handler. It only orchestrates: ask the credential source for credentials, cache
   them, replay over the shared cache/replay path. It is assembled from one-class-
@@ -30,9 +33,10 @@
   | `CookieHarvester` | `nodriver/cookie_harvester.py` | Read the cookies for one host from a nodriver browser (domain-suffix match) |
   | `Credentials` | `cloudflare/credentials.py` | Cookies + user-agent value object, shared by any Cloudflare bypass |
 
-  Only `nodriver/` depends on the optional `nodriver` package; `cloudflare/`
-  imports with the base install. (A `concurrency/LoopBoundLock` for the solve lock
-  was removed in #47, when single-flight became a shared solve task in the base.)
+  Only `nodriver/` depends on the optional `nodriver` package; `cloudflare/` and
+  `concurrency/` import with the base install. (An earlier
+  `concurrency/LoopBoundLock` for the solve lock was removed in #47, when
+  single-flight became a shared solve task in the base.)
 
   Each has a small public interface and its own unit tests, so the handler's tests
   replace collaborators instead of patching private methods. Applying the same
@@ -90,13 +94,14 @@ lowercase `user-agent` cannot ride along with the cached `User-Agent`.
   without that header. Other replay failures (404, 5xx, timeout, network errors
   that outlast the retries) return `None` and keep the cached session, since a
   fresh solve would hit the same failure.
+- Cached-credential requests share one `aiohttp.ClientSession` (#64), so they
+  reuse connections instead of paying a TCP + TLS handshake each. Like the
+  browser, it belongs to one event loop and is replaced on a loop change; the
+  handler's `close()` releases it.
 
 Known rough edges / deferred:
 - On interpreter/loop shutdown nodriver can emit a benign "Event loop is closed"
   traceback from its browser-teardown callbacks; it does not affect `get()`.
-- The shared replay opens a fresh `aiohttp.ClientSession` per request (no
-  connection pooling). A persistent pooled session is a worthwhile follow-up but
-  adds session lifecycle/close semantics to both handlers; deferred.
 
 ## Goal
 

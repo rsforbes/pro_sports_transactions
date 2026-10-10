@@ -1,13 +1,12 @@
 """Owns the Chromium-based browser that nodriver drives."""
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from ..concurrency.loop_bound import LoopBound
+
 if TYPE_CHECKING:  # avoid a runtime import cycle through handlers/
     from .nodriver_config import NodriverConfig
-
-logger = logging.getLogger(__name__)
 
 INSTALL_HINT = (
     "NodriverRequestHandler requires the 'nodriver' extra and a Chromium-based "
@@ -25,7 +24,8 @@ class BrowserSession:
     Each ``asyncio.run()`` creates a new loop and closes it on exit, so a session
     reused across ``asyncio.run()`` calls would otherwise drive a dead
     connection - observed live to hang indefinitely. :meth:`browser` detects the
-    loop change, stops the old browser, and launches a new one.
+    loop change, stops the old browser, and launches a new one (see
+    :class:`~pro_sports_transactions.concurrency.LoopBound`).
     """
 
     def __init__(self, config: "NodriverConfig"):
@@ -34,8 +34,13 @@ class BrowserSession:
         # reaches the caller instead of being swallowed by a handler's
         # None-on-failure contract later.
         self.nodriver = self.import_nodriver()
-        self._browser = None
-        self._loop = None
+        self._browsers = LoopBound(
+            self._launch,
+            self._stop,
+            self._alive,
+            name="browser",
+            log_level=logging.INFO,  # a relaunch is slow; say why it happens
+        )
 
     @staticmethod
     def import_nodriver():
@@ -49,34 +54,29 @@ class BrowserSession:
     @property
     def is_running(self) -> bool:
         """True while a launched browser process is alive."""
-        return self._browser is not None and not getattr(
-            self._browser, "stopped", False
-        )
+        browser = self._browsers.resource
+        return browser is not None and self._alive(browser)
 
     async def browser(self):
         """A live browser on the running event loop, launching one if needed."""
-        loop = asyncio.get_running_loop()
-        if self._browser is not None and loop is not self._loop:
-            logger.info("event loop changed; relaunching the browser")
-            await self.close()
-        elif self._browser is not None and not self.is_running:
-            self._browser = None  # process exited on its own; nothing to stop
-        if self._browser is None:
-            self._browser = await self.nodriver.start(
-                browser_executable_path=self.config.browser_executable_path,
-                headless=self.config.headless,
-                sandbox=self.config.sandbox,
-                browser_args=list(self.config.browser_args),
-            )
-            self._loop = loop
-        return self._browser
+        return await self._browsers.get()
 
     async def close(self):
         """Stop the browser (if any) and free its resources."""
-        if self._browser is not None:
-            try:
-                self._browser.stop()
-            except Exception as e:  # pragma: no cover - best-effort teardown
-                logger.debug("browser stop failed: %s", e)
-            self._browser = None
-            self._loop = None
+        await self._browsers.close()
+
+    async def _launch(self):
+        return await self.nodriver.start(
+            browser_executable_path=self.config.browser_executable_path,
+            headless=self.config.headless,
+            sandbox=self.config.sandbox,
+            browser_args=list(self.config.browser_args),
+        )
+
+    @staticmethod
+    async def _stop(browser):
+        browser.stop()
+
+    @staticmethod
+    def _alive(browser) -> bool:
+        return not getattr(browser, "stopped", False)

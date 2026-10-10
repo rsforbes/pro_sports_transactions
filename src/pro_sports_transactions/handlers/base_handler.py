@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from ..cloudflare.credential_cache import CredentialCache
 from ..cloudflare.credentialed_client import CredentialedClient
-from ..cloudflare.single_flight import SingleFlight
+from ..concurrency.single_flight import SingleFlight
 
 # Most requests one get() makes: the cached credentials, then up to two sets of
 # fresh ones (see CachedCredentialHandler.get).

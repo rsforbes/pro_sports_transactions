@@ -3,8 +3,8 @@ get(), and how its pieces fit together.
 
 The solve (the subclass hook) and the client are fakes, so only those
 decisions are exercised. The pieces have their own tests under
-tests/unit/cloudflare/ (SingleFlight covers the concurrency mechanics:
-cancellation, closed event loops).
+tests/unit/cloudflare/ and tests/unit/concurrency/ (SingleFlight covers
+the concurrency mechanics: cancellation, closed event loops).
 """
 
 import asyncio
