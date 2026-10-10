@@ -1,6 +1,6 @@
 [![Version: PyPI](https://img.shields.io/pypi/v/pro_sports_transactions.svg?longCache=true&style=for-the-badge&logo=pypi)](https://pypi.python.org/pypi/pro_sports_transactions)
 ![Total Downloads](https://img.shields.io/pepy/dt/pro_sports_transactions?style=for-the-badge)
-[![License: MIT](https://img.shields.io/github/license/rsforbes/pro_sports_transactions.svg?style=for-the-badge)](https://github.com/rsforbes/pro_sports_transactions/blob/master/LICENSE)
+[![License: MIT](https://img.shields.io/github/license/rsforbes/pro_sports_transactions.svg?style=for-the-badge)](https://github.com/rsforbes/pro_sports_transactions/blob/main/LICENSE)
 
 # Pro Sports Transactions API
 Pro Sports Transactions is a Python API client-library for https://www.prosportstransactions.com enabling software engineers, data scientists, and sports fans with the ability to easily retrieve trades, free agent movements, signings, injuries, disciplinary actions, legal/criminal actions, and much more for five of the North American professional leagues: MLB, MLS, NBA, NFL, and NHL.
@@ -170,9 +170,10 @@ async def get_dataframe_with_retry(search, attempts=3):
     return df  # still failing; inspect df.attrs["errors"]
 
 
-async with NodriverRequestHandler() as handler:
-    search = pst.Search(..., request_handler=handler)
-    df = await get_dataframe_with_retry(search)
+async def main():
+    async with NodriverRequestHandler() as handler:
+        search = pst.Search(..., request_handler=handler)
+        return await get_dataframe_with_retry(search)
 ```
 
 Notes:
@@ -218,12 +219,10 @@ For anything else, open an issue on this repository.
 ## Contributing
 See [CONTRIBUTING.md](https://github.com/rsforbes/pro_sports_transactions/blob/main/CONTRIBUTING.md) for development setup, tests, and code quality.
 
-&nbsp;
-# Thank You Frank Marousek!
+## Thank You Frank Marousek!
 Huge thanks to Frank Marousek @ Pro Sports Transactions for all of his efforts, and the efforts of those who have helped him, in compiling an excellent source of transactional information.
-  
-&nbsp;
-# Disclaimer on accuracy, usage, and completeness of information.
-The Pro Sports Transactions API is in no way affiliated with [Pro Sports Transactions](https://www.prosportstransactions.com/). The Pro Sports Transactions API provides a means for programatic access to [Pro Sports Transactions](https://www.prosportstransactions.com/). While the The Pro Sports Transactions API is open source under an MIT License, usage of all information obtained via the Pro Sports Transactions API is subject to all rights reserved by [Pro Sports Transactions](https://www.prosportstransactions.com/). No warranty, express or implied, is made regarding accuracy, adequacy, completeness, legality, reliability or usefulness of any information.
 
-For questions, concerns, or other regarding the information provided via the Pro Sports Transaction API, please visit [Pro Sports Transactions](https://www.prosportstransactions.com/).
+## Disclaimer on accuracy, usage, and completeness of information
+The Pro Sports Transactions API is in no way affiliated with [Pro Sports Transactions](https://www.prosportstransactions.com/). The Pro Sports Transactions API provides a means for programmatic access to [Pro Sports Transactions](https://www.prosportstransactions.com/). While the Pro Sports Transactions API is open source under an MIT License, usage of all information obtained via the Pro Sports Transactions API is subject to all rights reserved by [Pro Sports Transactions](https://www.prosportstransactions.com/). No warranty, express or implied, is made regarding accuracy, adequacy, completeness, legality, reliability or usefulness of any information.
+
+For questions, concerns, or other regarding the information provided via the Pro Sports Transactions API, please visit [Pro Sports Transactions](https://www.prosportstransactions.com/).

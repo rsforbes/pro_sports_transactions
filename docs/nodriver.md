@@ -1,7 +1,8 @@
 # nodriver handler guide
 
 Setup, supported browsers, caveats, and troubleshooting for
-`NodriverRequestHandler`.
+`NodriverRequestHandler`. A runnable example lives in
+[`examples/nodriver_search.py`](../examples/nodriver_search.py).
 
 ## Prerequisites
 
@@ -23,8 +24,6 @@ Windows and macOS have no built-in equivalent of xvfb, so there is no supported 
 - **Run inside Linux (tested).** Use Docker on Windows or macOS, or WSL2 on Windows, with Chrome and `xvfb` installed, and launch under `xvfb-run -a`. This is how the project's dev container runs the live integration test, and nothing appears on your screen.
 - **Push the window out of sight (untested).** Chrome flags such as `--window-position=-32000,-32000` (off-screen) or `--start-minimized` can be passed with `NodriverConfig(browser_args=["--disable-dev-shm-usage", "--window-position=-32000,-32000"])`. Keep `--disable-dev-shm-usage` in the list, because setting `browser_args` replaces the default. Chrome may throttle rendering in hidden or minimized windows, and `verify_cf()` must locate and click the Turnstile checkbox, so the challenge may stop clearing.
 - **Windows/macOS servers with no logged-in user (untested, likely to fail).** A Windows service has no interactive desktop, and macOS needs a logged-in graphical session for windows to render. Prefer the Linux route above.
-
-A runnable example lives in [`examples/nodriver_search.py`](../examples/nodriver_search.py).
 
 ### Supported browsers
 

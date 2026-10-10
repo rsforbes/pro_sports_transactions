@@ -7,10 +7,14 @@ Thanks for contributing to `pro_sports_transactions`!
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management and
 [Ruff](https://docs.astral.sh/ruff/) for formatting and linting.
 
-1. Install dependencies and enable the git hooks: `uv sync --group dev && git config core.hooksPath .githooks`
-2. Run tests: `uv run pytest`
-3. Format code: `uv run ruff format .`
-4. Lint code: `uv run ruff check .`
+Install dependencies and enable the git hooks:
+
+```bash
+uv sync --group dev && git config core.hooksPath .githooks
+```
+
+Then see [Testing](#testing) and [Code Quality](#code-quality) for the commands
+to run before opening a pull request.
 
 The development dependencies (pytest, pytest-asyncio, pytest-mock, Ruff,
 pre-commit) and their version ranges are listed under `[dependency-groups] dev`
