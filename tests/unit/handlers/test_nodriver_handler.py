@@ -10,11 +10,11 @@ contained) and its use of the shared path are exercised.
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pro_sports_transactions.cloudflare import Credentials
+from pro_sports_transactions.cloudflare import Credentials, ReplayResult
 from pro_sports_transactions.handlers import NodriverConfig, NodriverRequestHandler
 from pro_sports_transactions.nodriver import BrowserSession, NodriverCredentialSource
 
@@ -35,9 +35,9 @@ def make_handler(credentials=CREDENTIALS, replay="<html>replayed</html>"):
     handler.source.get_credentials = AsyncMock(return_value=credentials)
     handler.session = MagicMock()
     handler.session.close = AsyncMock()
-    replay_mock = AsyncMock(return_value=replay)
-    handler._try_cached_request = replay_mock
-    return handler, handler.source, replay_mock
+    handler._client = MagicMock()
+    handler._client.fetch = AsyncMock(return_value=ReplayResult(text=replay))
+    return handler, handler.source, handler._client.fetch
 
 
 class TestNodriverRequestHandler:
@@ -59,10 +59,10 @@ class TestNodriverRequestHandler:
 
         assert await handler.get(URL, {"h": "v"}) == "<html>replayed</html>"
         source.get_credentials.assert_awaited_once_with(URL)
-        replay.assert_awaited_once_with(URL, {"h": "v"})
+        replay.assert_awaited_once_with(
+            URL, {"h": "v"}, {"User-Agent": "Chrome/136"}, "cf_clearance=new"
+        )
         assert handler.is_cache_valid()
-        assert handler._cached_cookies == "cf_clearance=new"
-        assert handler._cached_headers == {"User-Agent": "Chrome/136"}
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -152,7 +152,9 @@ class TestNodriverRequestHandler:
         )
 
         assert await handler.get(URL, {"h": "v"}) == "<html>cached</html>"
-        replay.assert_awaited_once_with(URL, {"h": "v"})
+        replay.assert_awaited_once_with(
+            URL, {"h": "v"}, {"User-Agent": "Chrome/136"}, "cf_clearance=tok"
+        )
         source.get_credentials.assert_not_called()
 
     @pytest.mark.unit
@@ -194,15 +196,14 @@ class TestNodriverRequestHandler:
             NodriverConfig(settle_seconds=0, poll_interval=0)
         )
 
+        handler._client = MagicMock()
+        handler._client.fetch = AsyncMock(
+            return_value=ReplayResult(text="<html>replayed</html>")
+        )
+
         async def solve():
             handler.clear_cache()  # force the browser path
-            with patch.object(
-                handler,
-                "_try_cached_request",
-                new_callable=AsyncMock,
-                return_value="<html>replayed</html>",
-            ):
-                return await handler.get(URL, {})
+            return await handler.get(URL, {})
 
         assert asyncio.run(solve()) == "<html>replayed</html>"
         assert asyncio.run(solve()) == "<html>replayed</html>"
