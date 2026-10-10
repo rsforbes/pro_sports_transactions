@@ -8,6 +8,47 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+def make_response(status=200, text="", json=None, headers=None):
+    """A mock aiohttp response. ``json`` may be an exception to raise."""
+    response = AsyncMock()
+    response.status = status
+    response.headers = headers or {}
+    response.text = AsyncMock(return_value=text)
+    if isinstance(json, Exception):
+        response.json = AsyncMock(side_effect=json)
+    else:
+        response.json = AsyncMock(return_value=json)
+    response.__aenter__ = AsyncMock(return_value=response)
+    response.__aexit__ = AsyncMock(return_value=False)
+    return response
+
+
+def make_session(get=None, post=None):
+    """A mock aiohttp.ClientSession whose get()/post() return the given
+    responses (or raise, if given an exception)."""
+    session = AsyncMock()
+    for name, response in (("get", get), ("post", post)):
+        if isinstance(response, Exception):
+            setattr(session, name, MagicMock(side_effect=response))
+        else:
+            setattr(session, name, MagicMock(return_value=response))
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    return session
+
+
+@pytest.fixture
+def response():
+    """Factory for mock aiohttp responses (see make_response)."""
+    return make_response
+
+
+@pytest.fixture
+def session():
+    """Factory for mock aiohttp sessions (see make_session)."""
+    return make_session
+
+
 @pytest.fixture
 def fake_nodriver():
     """Stand in for the optional nodriver package. It is imported when a

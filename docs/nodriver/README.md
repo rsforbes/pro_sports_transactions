@@ -7,12 +7,16 @@
 
 ## What shipped on this branch
 
-- `CachedCredentialHandler` base (in `handlers/base_handler.py`) — owns the
-  credential cache, fast `aiohttp` replay, and single-flight solving (#47): at
-  most one solve runs at a time, and every request needing fresh credentials
-  awaits that same solve task, sharing its credentials, failure, or exception.
-  `UnflareRequestHandler` and `NodriverRequestHandler` subclass it and implement
-  only their service-specific `_solve`.
+- `CachedCredentialHandler` base (in `handlers/base_handler.py`) — the request
+  loop: replay cached credentials, solve when there are none or they are
+  rejected. `UnflareRequestHandler` and `NodriverRequestHandler` subclass it and
+  implement only their service-specific `_solve`. It is built from pieces in
+  `cloudflare/` that any credential source (Playwright, FlareSolverr, ...) can
+  reuse: `CredentialCache` (cookies + headers, expiry anchored on
+  `cf_clearance`), `CredentialedClient` (one plain-HTTP request: header merge,
+  transient retries, rejection vs site failure), and `SingleFlight` (#47: at
+  most one solve at a time, shared by every request that needs it, along with
+  its credentials, failure, or exception).
 - `NodriverRequestHandler` (`handlers/nodriver_handler.py`) — the user-facing
   handler. It only orchestrates: ask the credential source for credentials, cache
   them, replay over the shared cache/replay path. It is assembled from one-class-
@@ -45,7 +49,7 @@ request, then serves the second request and a full `Search` through the **cached
 `aiohttp` replay path**, with `is_cache_valid()` true after the first solve. The
 harvested `cf_clearance` + UA work with a plain HTTP client from the same IP, so only
 the first request pays the browser cost. Replay requires that only the browser's UA is
-sent: `_try_cached_request` merges caller headers case-insensitively so a caller's
+sent: `CredentialedClient.merge_headers` merges caller headers case-insensitively so a caller's
 lowercase `user-agent` cannot ride along with the cached `User-Agent`.
 
 **Hardening from code review:**
