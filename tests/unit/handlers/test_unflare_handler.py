@@ -421,10 +421,10 @@ class TestUnflareHandler:
         with patch("aiohttp.ClientSession", return_value=mock_session) as mock_cls:
             await handler.get("http://example.com", {})
 
-            # All ClientSession calls should include a timeout
-            for call in mock_cls.call_args_list:
-                _, kwargs = call
-                assert "timeout" in kwargs
+            # The Unflare solve and the replay should both have a timeout
+            solve_kwargs = mock_cls.call_args_list[0].kwargs
+            replay_kwargs = mock_session.get.call_args.kwargs
+            for kwargs in (solve_kwargs, replay_kwargs):
                 assert isinstance(kwargs["timeout"], aiohttp.ClientTimeout)
                 assert kwargs["timeout"].total == 120
 
@@ -455,13 +455,11 @@ class TestUnflareHandler:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("aiohttp.ClientSession", return_value=mock_session) as mock_cls:
+        with patch("aiohttp.ClientSession", return_value=mock_session):
             await handler.get("http://example.com", {"User-Agent": "test"})
 
-            # The final session (second call) should have Accept-Encoding in headers
-            final_call = mock_cls.call_args_list[-1]
-            _, kwargs = final_call
-            assert "headers" in kwargs
+            # The replay should have Accept-Encoding in its headers
+            kwargs = mock_session.get.call_args.kwargs
             assert kwargs["headers"]["Accept-Encoding"] == "gzip, deflate, br"
 
     @pytest.mark.unit
@@ -487,13 +485,13 @@ class TestUnflareHandler:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("aiohttp.ClientSession", return_value=mock_session) as mock_cls:
+        with patch("aiohttp.ClientSession", return_value=mock_session):
             await handler.get(
                 "http://example.com",
                 {"user-agent": "Edge/112", "accept-encoding": "gzip", "referer": "r"},
             )
 
-        sent = mock_cls.call_args.kwargs["headers"]
+        sent = mock_session.get.call_args.kwargs["headers"]
         ua_keys = [k for k in sent if k.lower() == "user-agent"]
         assert ua_keys == ["User-Agent"]
         assert sent["User-Agent"] == "Chrome/154"
@@ -525,10 +523,10 @@ class TestUnflareHandler:
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("aiohttp.ClientSession", return_value=mock_session) as mock_cls:
+        with patch("aiohttp.ClientSession", return_value=mock_session):
             await handler.get("http://example.com", {"User-Agent": "Edge/112"})
 
-        sent = mock_cls.call_args.kwargs["headers"]
+        sent = mock_session.get.call_args.kwargs["headers"]
         assert [k for k in sent if k.lower() == "user-agent"] == ["user-agent"]
         assert sent["user-agent"] == "Chrome/154"
         assert [k for k in sent if k.lower() == "accept-encoding"] == [

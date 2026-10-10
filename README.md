@@ -94,7 +94,7 @@ async with NodriverRequestHandler() as handler:
     df = await pst.Search(..., request_handler=handler).get_dataframe()
 ```
 
-Each constructor takes an optional config (`NodriverConfig`, `UnflareConfig`) and works with its defaults. `async with` calls `close()` on exit; for nodriver that shuts down the browser, for the others it's a no-op, so the same code is correct for every handler.
+Each constructor takes an optional config (`NodriverConfig`, `UnflareConfig`) and works with its defaults. `async with` calls `close()` on exit; for nodriver that shuts down the browser and closes the connections its cached-session requests reuse, for Unflare it closes those connections, and for direct it's a no-op, so the same code is correct for every handler.
 
 ### nodriver caveats
 
@@ -135,8 +135,9 @@ df = await search_transactions()
 
 `async with` makes sure the handler cleans up after itself when the block ends, even if an error happens partway through. What "cleaning up" means depends on the handler:
 
-- **nodriver**: shuts down the browser it started. This is the one that matters.
-- **Unflare** and **direct**: nothing to clean up (the Unflare browser runs in its own separate service). `async with` still works, so you can switch handlers without changing your code.
+- **nodriver**: shuts down the browser it started, and closes the connections its cached-session requests reuse. The browser is the one that matters.
+- **Unflare**: closes the connections its cached-session requests reuse (the Unflare browser runs in its own separate service).
+- **direct**: nothing to clean up. `async with` still works, so you can switch handlers without changing your code.
 
 You can skip `async with` and just create the handler:
 

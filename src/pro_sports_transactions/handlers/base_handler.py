@@ -160,8 +160,10 @@ class CachedCredentialHandler(RequestHandler):
         """Release resources held by the handler: stop a solve still running
         (it is shielded from its callers, so one a cancelled request left
         behind could otherwise acquire resources, such as a browser, after the
-        handler is closed). Subclasses that own resources override this and
-        call it first. Cached credentials are kept.
+        handler is closed), then close the connections the cached-credential
+        requests share. Subclasses that own resources override this and call
+        it first. Cached credentials are kept, and a later request reopens
+        what it needs.
 
         Every built-in handler supports ``close()`` and ``async with``, so
         handlers can be swapped without changing the calling code. (Defined on
@@ -169,6 +171,7 @@ class CachedCredentialHandler(RequestHandler):
         custom handlers' method resolution is unaffected.)
         """
         await self._solves.close()
+        await self._client.close()
 
     async def __aenter__(self):
         return self

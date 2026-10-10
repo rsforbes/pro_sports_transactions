@@ -94,7 +94,10 @@ class TestFetch:
         )
 
         assert result == ReplayResult(text="<html>OK</html>")
-        kwargs = mock_cls.call_args.kwargs
+        assert isinstance(
+            mock_cls.call_args.kwargs["cookie_jar"], aiohttp.DummyCookieJar
+        )
+        kwargs = mock_cls.return_value.get.call_args.kwargs
         assert kwargs["headers"]["Cookie"] == "cf_clearance=abc"
         assert kwargs["headers"]["User-Agent"] == "Chrome/154"
         assert isinstance(kwargs["timeout"], aiohttp.ClientTimeout)
@@ -126,13 +129,14 @@ class TestFetch:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_transient_errors_are_retried(self, response, session):
-        client = CredentialedClient()
-        flaky = session(get=aiohttp.ClientConnectionError("reset"))
-        ok = session(get=response(text="<html>OK</html>"))
+        flaky = session()
+        flaky.get.side_effect = [
+            aiohttp.ClientConnectionError("reset"),
+            aiohttp.ClientConnectionError("reset"),
+            response(text="<html>OK</html>"),
+        ]
 
-        with patch("aiohttp.ClientSession", side_effect=[flaky, flaky, ok]):
-            with patch("asyncio.sleep"):
-                result = await client.fetch(URL, {}, UA, None)
+        result, _ = await fetch(CredentialedClient(), flaky)
 
         assert result.text == "<html>OK</html>"
 
@@ -145,14 +149,82 @@ class TestFetch:
         result, mock_cls = await fetch(client, broken)
 
         assert result == ReplayResult()
-        assert mock_cls.call_count == 3
+        assert broken.get.call_count == 3
+        assert mock_cls.call_count == 1
 
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_timeout_is_not_retried(self, session):
-        result, mock_cls = await fetch(
-            CredentialedClient(), session(get=asyncio.TimeoutError())
-        )
+        timing_out = session(get=asyncio.TimeoutError())
+
+        result, _ = await fetch(CredentialedClient(), timing_out)
 
         assert result == ReplayResult()
+        assert timing_out.get.call_count == 1
+
+
+class TestSession:
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_requests_share_one_session(self, response, session):
+        """Reusing the session reuses its connections: no handshake per page."""
+        client = CredentialedClient()
+        shared = session(get=response(text="<html>OK</html>"))
+
+        with patch("aiohttp.ClientSession", return_value=shared) as mock_cls:
+            await client.fetch(URL, {}, UA, "cf_clearance=old")
+            await client.fetch(URL, {}, UA, "cf_clearance=new")
+
         assert mock_cls.call_count == 1
+        sent = [c.kwargs["headers"]["Cookie"] for c in shared.get.call_args_list]
+        assert sent == ["cf_clearance=old", "cf_clearance=new"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_close_closes_the_session_and_a_later_request_reopens(
+        self, response, session
+    ):
+        client = CredentialedClient()
+        first = session(get=response(text="<html>OK</html>"))
+        second = session(get=response(text="<html>OK</html>"))
+
+        with patch("aiohttp.ClientSession", side_effect=[first, second]):
+            await client.fetch(URL, {}, UA, None)
+            await client.close()
+            await client.close()  # safe to repeat
+            result = await client.fetch(URL, {}, UA, None)
+
+        first.close.assert_awaited_once()
+        assert result.text == "<html>OK</html>"
+        assert second.get.call_count == 1
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_a_closed_session_is_replaced(self, response, session):
+        """A session closed under a request (e.g. by close() between retries)
+        is replaced instead of raising "Session is closed"."""
+        client = CredentialedClient()
+        first = session(get=response(text="<html>OK</html>"))
+        second = session(get=response(text="<html>OK</html>"))
+
+        with patch("aiohttp.ClientSession", side_effect=[first, second]):
+            await client.fetch(URL, {}, UA, None)
+            first.closed = True
+            await client.fetch(URL, {}, UA, None)
+
+        assert second.get.call_count == 1
+
+    @pytest.mark.unit
+    def test_new_event_loop_replaces_the_session(self, response, session):
+        """A session belongs to the loop that created it; each asyncio.run()
+        makes a new one, so the old session is closed and a new one opened."""
+        client = CredentialedClient()
+        first = session(get=response(text="<html>OK</html>"))
+        second = session(get=response(text="<html>OK</html>"))
+
+        with patch("aiohttp.ClientSession", side_effect=[first, second]):
+            asyncio.run(client.fetch(URL, {}, UA, None))
+            asyncio.run(client.fetch(URL, {}, UA, None))
+
+        first.close.assert_awaited_once()
+        assert second.get.call_count == 1

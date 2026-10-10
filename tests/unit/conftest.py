@@ -32,6 +32,7 @@ def make_session(get=None, post=None):
             setattr(session, name, MagicMock(side_effect=response))
         else:
             setattr(session, name, MagicMock(return_value=response))
+    session.closed = False
     session.__aenter__ = AsyncMock(return_value=session)
     session.__aexit__ = AsyncMock(return_value=False)
     return session
