@@ -5,7 +5,7 @@ import gc
 
 import pytest
 
-from pro_sports_transactions.cloudflare.single_flight import SingleFlight
+from pro_sports_transactions.concurrency.single_flight import SingleFlight
 
 
 class Job:

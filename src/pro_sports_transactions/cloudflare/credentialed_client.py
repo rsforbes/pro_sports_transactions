@@ -7,6 +7,7 @@ from typing import Dict, Mapping, Optional
 
 import aiohttp
 
+from ..concurrency.loop_bound import LoopBound
 from .challenge import challenge_present
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ class CredentialedClient:
     Requests share one ``aiohttp`` session, so they reuse connections instead
     of paying a TCP + TLS handshake each. The session belongs to the event
     loop that created it; each ``asyncio.run()`` creates a new loop, so a
-    loop change replaces it (as :class:`BrowserSession` does the browser).
+    loop change replaces it (see :class:`~pro_sports_transactions.concurrency.LoopBound`).
     :meth:`close` releases it; a later request opens a new one.
 
     Attributes:
@@ -52,45 +53,23 @@ class CredentialedClient:
             raise ValueError(f"attempts must be at least 1, got {attempts}")
         self.timeout = timeout
         self.attempts = attempts
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-
-    async def _session_for_loop(self) -> aiohttp.ClientSession:
-        """The shared session on the running event loop, opening one if needed."""
-        loop = asyncio.get_running_loop()
-        stale = None
-        if self._session is not None and loop is not self._loop:
-            stale, self._session = self._session, None
-        if self._session is None or self._session.closed:
-            # No cookie jar: aiohttp lets jar cookies override the Cookie
-            # header, so a Set-Cookie kept from one response could shadow the
-            # credentials of a later solve. Each request sends exactly the
-            # cached ones.
-            self._session = aiohttp.ClientSession(cookie_jar=aiohttp.DummyCookieJar())
-            self._loop = loop
-        # Replaced before awaiting, so a concurrent request on the new loop
-        # shares the new session rather than opening another.
-        if stale is not None:
-            await self._close_session(stale)
-            # A close() while awaiting would leave the new session closed,
-            # and a request on it raises RuntimeError: look again.
-            return await self._session_for_loop()
-        return self._session
+        self._session = LoopBound(
+            self._open_session,
+            lambda session: session.close(),
+            lambda session: not session.closed,
+            name="session",
+        )
 
     async def close(self):
         """Close the shared session (if any)."""
-        session, self._session, self._loop = self._session, None, None
-        if session is not None:
-            await self._close_session(session)
+        await self._session.close()
 
     @staticmethod
-    async def _close_session(session: aiohttp.ClientSession):
-        try:
-            await session.close()
-        except Exception as e:  # pragma: no cover - best-effort teardown
-            # A session from a loop that has since closed cannot close its
-            # connections; they went with that loop.
-            logger.debug("session close failed: %s", e)
+    async def _open_session() -> aiohttp.ClientSession:
+        # No cookie jar: aiohttp lets jar cookies override the Cookie header,
+        # so a Set-Cookie kept from one response could shadow the credentials
+        # of a later solve. Each request sends exactly the cached ones.
+        return aiohttp.ClientSession(cookie_jar=aiohttp.DummyCookieJar())
 
     @staticmethod
     def merge_headers(
@@ -147,7 +126,7 @@ class CredentialedClient:
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         for attempt in range(self.attempts):
             try:
-                session = await self._session_for_loop()
+                session = await self._session.get()
                 async with session.get(
                     url, headers=headers, timeout=timeout
                 ) as response:
