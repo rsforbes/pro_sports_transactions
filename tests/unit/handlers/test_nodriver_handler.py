@@ -37,6 +37,7 @@ def make_handler(credentials=CREDENTIALS, replay="<html>replayed</html>"):
     handler.session.close = AsyncMock()
     handler._client = MagicMock()
     handler._client.fetch = AsyncMock(return_value=ReplayResult(text=replay))
+    handler._client.close = AsyncMock()
     return handler, handler.source, handler._client.fetch
 
 
@@ -181,6 +182,7 @@ class TestNodriverRequestHandler:
             assert entered is handler
 
         handler.session.close.assert_awaited_once()
+        handler._client.close.assert_awaited_once()
 
     @pytest.mark.unit
     def test_new_event_loop_relaunches_browser_end_to_end(

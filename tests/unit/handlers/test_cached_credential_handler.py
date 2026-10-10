@@ -49,6 +49,9 @@ class FakeClient:
         self.in_flight -= 1
         return self.respond(cookies)
 
+    async def close(self):
+        self.closed = True
+
 
 class CountingHandler(CachedCredentialHandler):
     """A handler whose solve caches new credentials (v1, v2, ...) after a
@@ -234,6 +237,7 @@ class TestSingleFlight:
         assert task.cancelled()
         assert await waiter is None
         assert not handler.is_cache_valid()
+        assert handler.client.closed
 
 
 class TestRequestDecisions:

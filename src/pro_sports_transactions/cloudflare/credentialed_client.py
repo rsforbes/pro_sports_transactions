@@ -30,10 +30,15 @@ class ReplayResult:
 class CredentialedClient:
     """Fetches a URL over plain HTTP with Cloudflare session credentials.
 
-    Stateless: it reports whether Cloudflare rejected the credentials, and
-    the caller decides what to do about it. A transient network error is
-    retried a few times, so a blip does not escalate to an expensive fresh
-    solve.
+    It reports whether Cloudflare rejected the credentials, and the caller
+    decides what to do about it. A transient network error is retried a few
+    times, so a blip does not escalate to an expensive fresh solve.
+
+    Requests share one ``aiohttp`` session, so they reuse connections instead
+    of paying a TCP + TLS handshake each. The session belongs to the event
+    loop that created it; each ``asyncio.run()`` creates a new loop, so a
+    loop change replaces it (as :class:`BrowserSession` does the browser).
+    :meth:`close` releases it; a later request opens a new one.
 
     Attributes:
         timeout: Total seconds allowed per attempt.
@@ -47,6 +52,45 @@ class CredentialedClient:
             raise ValueError(f"attempts must be at least 1, got {attempts}")
         self.timeout = timeout
         self.attempts = attempts
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+    async def _session_for_loop(self) -> aiohttp.ClientSession:
+        """The shared session on the running event loop, opening one if needed."""
+        loop = asyncio.get_running_loop()
+        stale = None
+        if self._session is not None and loop is not self._loop:
+            stale, self._session = self._session, None
+        if self._session is None or self._session.closed:
+            # No cookie jar: aiohttp lets jar cookies override the Cookie
+            # header, so a Set-Cookie kept from one response could shadow the
+            # credentials of a later solve. Each request sends exactly the
+            # cached ones.
+            self._session = aiohttp.ClientSession(cookie_jar=aiohttp.DummyCookieJar())
+            self._loop = loop
+        # Replaced before awaiting, so a concurrent request on the new loop
+        # shares the new session rather than opening another.
+        if stale is not None:
+            await self._close_session(stale)
+            # A close() while awaiting would leave the new session closed,
+            # and a request on it raises RuntimeError: look again.
+            return await self._session_for_loop()
+        return self._session
+
+    async def close(self):
+        """Close the shared session (if any)."""
+        session, self._session, self._loop = self._session, None, None
+        if session is not None:
+            await self._close_session(session)
+
+    @staticmethod
+    async def _close_session(session: aiohttp.ClientSession):
+        try:
+            await session.close()
+        except Exception as e:  # pragma: no cover - best-effort teardown
+            # A session from a loop that has since closed cannot close its
+            # connections; they went with that loop.
+            logger.debug("session close failed: %s", e)
 
     @staticmethod
     def merge_headers(
@@ -103,31 +147,29 @@ class CredentialedClient:
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         for attempt in range(self.attempts):
             try:
-                async with aiohttp.ClientSession(
-                    headers=headers, timeout=timeout
-                ) as session:
-                    async with session.get(url) as response:
-                        if response.status == 200:
-                            return ReplayResult(
-                                text=await response.text(encoding="utf-8")
-                            )
-                        # errors="replace": a non-UTF-8 error body must not
-                        # raise UnicodeDecodeError out of the check or the log.
-                        body = await response.text(errors="replace")
-                        if self.is_rejection(response.status, response.headers, body):
-                            logger.warning(
-                                "Session credentials rejected (%d)", response.status
-                            )
-                            return ReplayResult(rejected=True)
-                        # These messages say "cached-session", not "credential":
-                        # Semgrep's python-logger-credential-disclosure rule flags
-                        # any "credential" log message with a %s placeholder.
+                session = await self._session_for_loop()
+                async with session.get(
+                    url, headers=headers, timeout=timeout
+                ) as response:
+                    if response.status == 200:
+                        return ReplayResult(text=await response.text(encoding="utf-8"))
+                    # errors="replace": a non-UTF-8 error body must not
+                    # raise UnicodeDecodeError out of the check or the log.
+                    body = await response.text(errors="replace")
+                    if self.is_rejection(response.status, response.headers, body):
                         logger.warning(
-                            "Cached-session request failed with status %d: %s",
-                            response.status,
-                            body,
+                            "Session credentials rejected (%d)", response.status
                         )
-                        return ReplayResult()
+                        return ReplayResult(rejected=True)
+                    # These messages say "cached-session", not "credential":
+                    # Semgrep's python-logger-credential-disclosure rule flags
+                    # any "credential" log message with a %s placeholder.
+                    logger.warning(
+                        "Cached-session request failed with status %d: %s",
+                        response.status,
+                        body,
+                    )
+                    return ReplayResult()
             except asyncio.TimeoutError as e:
                 # The full budget is already spent; retrying would stall the
                 # caller for minutes.
