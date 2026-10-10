@@ -39,23 +39,10 @@
                 "tamasfe.even-better-toml"
             ],
 
-            // VS Code settings to apply in the container
+            // Container-only VS Code settings. Editor, formatter, Ruff and
+            // Python settings live in .vscode/settings.json, which applies both
+            // in and out of the container.
             "settings": {
-
-                // Use Ruff as the Python formatter and format on save
-                "editor.formatOnSave": true,
-                "[python]": {
-                    "editor.defaultFormatter": "charliermarsh.ruff",
-                    // Apply Ruff's import sorting / lint autofixes on save
-                    "editor.codeActionsOnSave": {
-                        "source.fixAll.ruff": "explicit",
-                        "source.organizeImports.ruff": "explicit"
-                    }
-                },
-
-                // Point the interpreter at the uv-managed project virtualenv
-                "python.defaultInterpreterPath": "/workspace/.venv/bin/python",
-
                 // Set bash as the default terminal shell in Linux containers
                 // This ensures consistent shell behavior across different environments
                 "terminal.integrated.defaultProfile.linux": "bash"
