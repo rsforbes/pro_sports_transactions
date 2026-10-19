@@ -70,7 +70,7 @@ dependencies = [
 # docs/nodriver.md.
 nodriver = [
   "nodriver>=0.50,<1",
-  "opencv-python-headless>=4.9,<5",
+  "opencv-python-headless>=4.9,<6",
 ]
 
 [project.urls]
