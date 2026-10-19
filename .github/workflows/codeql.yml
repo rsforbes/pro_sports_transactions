@@ -1,0 +1,56 @@
+# CodeQL static analysis of the Python source and the GitHub Actions workflows.
+#
+# This replaces CodeQL "default setup" (Settings > Code security), which must
+# stay disabled: code scanning rejects uploads from this workflow while default
+# setup is on. Default setup stopped triggering on Dependabot pull requests in
+# October 2026, leaving them blocked on the required `Analyze (python)` check
+# with nothing to run it. A plain `pull_request` trigger runs for Dependabot
+# like CI does, so the check is always reported.
+#
+# The job names are the required status checks in the `main` ruleset
+# (`Analyze (python)`); keep them stable when changing the matrix.
+#
+# Both languages are interpreted, so `build-mode: none` needs no build step.
+
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 13 * * 1' # Mondays 13:00 UTC, with security.yml
+  workflow_dispatch:
+
+permissions: {}
+
+# A new push to a pull request supersedes its in-flight analysis; runs on main
+# (push, schedule) always finish so the code scanning baseline stays complete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload results to code scanning
+    strategy:
+      fail-fast: false # one language failing still reports the other
+      matrix:
+        language: [python, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - name: Analyze
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:${{ matrix.language }}
