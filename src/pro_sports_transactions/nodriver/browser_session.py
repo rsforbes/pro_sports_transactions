@@ -1,5 +1,7 @@
 """Owns the Chromium-based browser that nodriver drives."""
 
+import asyncio
+import contextlib
 import logging
 from typing import TYPE_CHECKING
 
@@ -26,7 +28,13 @@ class BrowserSession:
     connection - observed live to hang indefinitely. :meth:`browser` detects the
     loop change, stops the old browser, and launches a new one (see
     :class:`~pro_sports_transactions.concurrency.LoopBound`).
+
+    Attributes:
+        stop_timeout: Seconds to wait for the browser process to exit after
+            stopping it, before killing it (and again after killing it).
     """
+
+    stop_timeout: float = 10
 
     def __init__(self, config: "NodriverConfig"):
         self.config = config
@@ -73,9 +81,23 @@ class BrowserSession:
             browser_args=list(self.config.browser_args),
         )
 
-    @staticmethod
-    async def _stop(browser):
+    async def _stop(self, browser):
+        # stop() signals the process but never waits for it (and drops it if
+        # every signal fails). Unreaped, its asyncio transport is only cleaned
+        # up by the garbage collector after asyncio.run() has closed the loop,
+        # which prints "RuntimeError: Event loop is closed" at exit. So wait
+        # for it here. A browser from an earlier, closed loop can't be waited
+        # on: the wait raises, and LoopBound logs it (its close is best-effort).
+        process = getattr(browser, "_process", None)
         browser.stop()
+        if process is None:
+            return
+        try:
+            await asyncio.wait_for(process.wait(), self.stop_timeout)
+        except TimeoutError:
+            with contextlib.suppress(ProcessLookupError):  # exited meanwhile
+                process.kill()
+            await asyncio.wait_for(process.wait(), self.stop_timeout)
 
     @staticmethod
     def _alive(browser) -> bool:
