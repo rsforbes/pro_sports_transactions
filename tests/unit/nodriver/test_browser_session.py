@@ -55,20 +55,21 @@ class TestBrowserSession:
     ):
         """Each asyncio.run() makes a new loop and closes it on exit. A browser
         launched on an earlier loop has a dead connection (observed live to hang
-        get()), so a later loop must stop it and launch a new one."""
+        get()), so it is stopped as its loop ends and a later loop launches a
+        new one."""
         first, _ = make_fake_browser()
         second, _ = make_fake_browser()
         fake_nodriver.start = AsyncMock(side_effect=[first, second])
         session = BrowserSession(NodriverConfig())
 
         assert asyncio.run(session.browser()) is first
+        first.stop.assert_called_once()  # stopped as its loop ended
         with caplog.at_level(logging.INFO):
             assert asyncio.run(session.browser()) is second
 
-        first.stop.assert_called_once()  # old-loop browser shut down
         assert fake_nodriver.start.await_count == 2
-        # A relaunch is slow, so it is logged where users will see it.
-        assert "event loop changed; replacing the browser" in caplog.text
+        # A relaunch is slow, so why it happens is logged where users see it.
+        assert "event loop changed; reopened the browser" in caplog.text
 
     @pytest.mark.unit
     @pytest.mark.asyncio

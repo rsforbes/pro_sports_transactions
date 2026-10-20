@@ -25,9 +25,12 @@ class BrowserSession:
     The browser's CDP connection belongs to the event loop that launched it.
     Each ``asyncio.run()`` creates a new loop and closes it on exit, so a session
     reused across ``asyncio.run()`` calls would otherwise drive a dead
-    connection - observed live to hang indefinitely. :meth:`browser` detects the
-    loop change, stops the old browser, and launches a new one (see
-    :class:`~pro_sports_transactions.concurrency.LoopBound`).
+    connection - observed live to hang indefinitely. So a browser still running
+    when its loop ends is stopped then, on that loop, even if :meth:`close` is
+    never called, and :meth:`browser` on a later loop launches a new one. A
+    browser left from a loop that ended without that (one not run by
+    ``asyncio.run()``) is stopped when :meth:`browser` detects the loop change
+    (see :class:`~pro_sports_transactions.concurrency.LoopBound`).
 
     Attributes:
         stop_timeout: Seconds to wait for the browser process to exit after
