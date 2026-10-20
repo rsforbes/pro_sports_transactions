@@ -94,6 +94,7 @@ def make_fake_browser():
             else cookies
         )
         browser.stop = MagicMock()
+        browser._process = None  # no real Chrome process to wait for
         return browser, page
 
     return make

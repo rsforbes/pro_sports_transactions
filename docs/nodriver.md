@@ -46,7 +46,7 @@ Know these before choosing nodriver:
 - **The cache is in-memory and per-process.** Each new Python process launches the browser and solves again (several seconds, a few hundred MB of RAM). Keep one handler alive and reuse it across searches rather than creating one per request.
 - **On a desktop, a browser window opens** during the solve; that is expected. Under `xvfb` nothing is visible (see [Prerequisites](#prerequisites)).
 - **The browser's sandbox is off by default** (`NodriverConfig(sandbox=False)`), because the Chromium sandbox usually fails inside containers. On a desktop you can set `sandbox=True`.
-- **Shutdown noise.** When the program exits, nodriver may print an `Event loop is closed` traceback from its browser-teardown callbacks. It is harmless and does not affect results.
+- **Shutdown noise.** If one handler is reused across several `asyncio.run()` calls, the program may print an `Event loop is closed` traceback when it exits. It is harmless and does not affect results; see [Troubleshooting](#nodriver-runtimeerror-event-loop-is-closed-at-exit).
 - **It's an arms race.** The bypass depends on nodriver's `verify_cf()` clicking Cloudflare's Turnstile checkbox. When Cloudflare changes, it may stop working until nodriver is updated; the `nodriver>=0.50,<1` pin may need bumping. Unflare remains available as a fallback.
 - **Be a good citizen.** Bypassing the challenge doesn't remove the site's rate limits or terms of use. Keep request volume reasonable.
 
@@ -64,4 +64,5 @@ Know these before choosing nodriver:
 - **Solution**: `pip install pro_sports_transactions[nodriver]`.
 
 ### nodriver: `RuntimeError: Event loop is closed` at exit
-- **Harmless**: nodriver's browser-teardown callbacks can fire after the event loop has shut down. Results are unaffected.
+- **When it appears**: only when one handler is reused across several `asyncio.run()` calls. Each call runs a new event loop. A browser launched on an earlier loop is stopped from a later one, after its own loop has closed, so its process can't be cleaned up there. Using one handler inside a single `asyncio.run()` (as the README examples do) doesn't print it.
+- **Harmless**: results are unaffected, and the browser still exits.

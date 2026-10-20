@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import sys
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -88,6 +88,113 @@ class TestBrowserSession:
     @pytest.mark.asyncio
     async def test_close_stops_browser(self, fake_nodriver, make_fake_browser):
         browser, _ = make_fake_browser()
+        fake_nodriver.start = AsyncMock(return_value=browser)
+        session = BrowserSession(NodriverConfig())
+        await session.browser()
+
+        await session.close()
+
+        browser.stop.assert_called_once()
+        assert not session.is_running
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_stop_waits_for_process_exit(self, fake_nodriver, make_fake_browser):
+        """stop() doesn't reap Chrome; an unreaped process is cleaned up after
+        asyncio.run() closes the loop, printing 'Event loop is closed'."""
+        browser, _ = make_fake_browser()
+        process = browser._process = MagicMock()
+        process.wait = AsyncMock()
+        fake_nodriver.start = AsyncMock(return_value=browser)
+        session = BrowserSession(NodriverConfig())
+        await session.browser()
+
+        await session.close()
+
+        browser.stop.assert_called_once()
+        process.wait.assert_awaited_once()
+        process.kill.assert_not_called()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_stop_kills_process_that_does_not_exit(self, fake_nodriver):
+        browser = MagicMock()
+        process = browser._process = MagicMock()
+        exited = asyncio.Event()
+        process.wait = AsyncMock(side_effect=exited.wait)
+        process.kill = MagicMock(side_effect=exited.set)
+        session = BrowserSession(NodriverConfig())
+        session.stop_timeout = 0.01
+
+        await session._stop(browser)
+
+        process.kill.assert_called_once()
+        assert process.wait.await_count == 2  # timed out, then reaped after kill
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_stop_bounds_wait_after_kill(self, fake_nodriver):
+        """A process that survives SIGKILL (e.g. stuck in I/O) must not hang close()."""
+        browser = MagicMock()
+        process = browser._process = MagicMock()
+        process.wait = AsyncMock(side_effect=asyncio.Event().wait)  # never exits
+        session = BrowserSession(NodriverConfig())
+        session.stop_timeout = 0.01
+
+        with pytest.raises(TimeoutError):
+            await session._stop(browser)
+        process.kill.assert_called_once()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_stop_tolerates_exit_before_kill(self, fake_nodriver):
+        """Chrome exiting just after the wait times out makes kill() raise
+        ProcessLookupError; that is a clean exit, not a failure."""
+        browser = MagicMock()
+        process = browser._process = MagicMock()
+        process.wait = AsyncMock(side_effect=[TimeoutError, None])
+        process.kill = MagicMock(side_effect=ProcessLookupError)
+        session = BrowserSession(NodriverConfig())
+
+        await session._stop(browser)
+
+        assert process.wait.await_count == 2
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_stop_without_process_attribute(self, fake_nodriver):
+        """stop() must still run if nodriver's private _process is missing."""
+        browser = MagicMock(spec=["stop"])
+        session = BrowserSession(NodriverConfig())
+
+        await session._stop(browser)
+
+        browser.stop.assert_called_once()
+
+    @pytest.mark.unit
+    def test_new_event_loop_relaunches_despite_unwaitable_process(
+        self, fake_nodriver, make_fake_browser
+    ):
+        """The old browser's process belongs to the closed loop, so waiting on
+        it from the new loop raises; the relaunch must still happen."""
+        first, _ = make_fake_browser()
+        second, _ = make_fake_browser()
+        first._process = MagicMock()
+        first._process.wait = AsyncMock(
+            side_effect=RuntimeError("attached to a different loop")
+        )
+        fake_nodriver.start = AsyncMock(side_effect=[first, second])
+        session = BrowserSession(NodriverConfig())
+
+        asyncio.run(session.browser())
+        assert asyncio.run(session.browser()) is second
+
+        first.stop.assert_called_once()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_stop_without_process(self, fake_nodriver, make_fake_browser):
+        browser, _ = make_fake_browser()  # _process is None
         fake_nodriver.start = AsyncMock(return_value=browser)
         session = BrowserSession(NodriverConfig())
         await session.browser()
