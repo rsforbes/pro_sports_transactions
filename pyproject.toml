@@ -1,6 +1,6 @@
 [project]
 name = "pro_sports_transactions"
-version = "1.1.2"
+version = "1.2.0"
 description = "A Python Library for Consuming Transactions from Pro Sports Transactions (https://www.prosportstransactions.com)"
 readme = "README.md"
 license = "MIT"
