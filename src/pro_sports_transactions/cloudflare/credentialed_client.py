@@ -37,8 +37,8 @@ class CredentialedClient:
 
     Requests share one ``aiohttp`` session, so they reuse connections instead
     of paying a TCP + TLS handshake each. The session belongs to the event
-    loop that created it; each ``asyncio.run()`` creates a new loop, so a
-    loop change replaces it (see
+    loop that created it: it is closed when that loop ends (so an unclosed
+    client is not reported at exit), and the next loop opens a new one (see
     :class:`~pro_sports_transactions.concurrency.LoopBound`).
     :meth:`close` releases it; a later request opens a new one.
 
