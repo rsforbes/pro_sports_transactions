@@ -229,3 +229,9 @@ There's no manual version bump, tag, or upload:
 
 To force a specific version, merge a commit to `main` whose body contains a
 `Release-As: X.Y.Z` footer.
+
+Before a release that changes packaging, dependencies, or the `nodriver` extra,
+you can try the published package first: run the **TestPyPI** workflow
+([`testpypi.yml`](.github/workflows/testpypi.yml)) on the branch or tag. It
+publishes a `.devN` release candidate to TestPyPI, installs it into clean
+environments, and runs the README Quick Start. Small changes can skip it.
