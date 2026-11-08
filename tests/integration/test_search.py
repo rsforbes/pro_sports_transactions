@@ -1,12 +1,24 @@
 """Integration tests for search functionality."""
 
 # Test files naturally have similar test data
+import json
 from datetime import date
 
 import pytest
 
 import pro_sports_transactions as pst
 from pro_sports_transactions.search import League, Search, TransactionType
+
+
+def assert_blocked(actual_json):
+    """A blocked search: no results, with the failure reported in ``errors``.
+
+    Checks the structure, not the error text, which callers shouldn't match on.
+    """
+    actual = json.loads(actual_json)
+    assert actual["transactions"] == []
+    assert actual["pages"] == 0
+    assert actual["errors"]
 
 
 @pytest.mark.integration
@@ -32,12 +44,7 @@ async def test_search_unicode():
     ).get_json()
 
     # Expected failure due to Cloudflare JA4 protection blocking direct requests
-    expected_cloudflare_blocked = (
-        '{"transactions": [], "pages": 0, '
-        '"errors": ["TypeError(\\"cannot parse from \'NoneType\'\\")"]}'
-    )
-
-    assert actual == expected_cloudflare_blocked
+    assert_blocked(actual)
 
 
 @pytest.mark.integration
@@ -82,9 +89,4 @@ async def test_search_readme_md_example():
     ).get_json()
 
     # Expected failure due to Cloudflare JA4 protection blocking direct requests
-    expected_cloudflare_blocked = (
-        '{"transactions": [], "pages": 0, '
-        '"errors": ["TypeError(\\"cannot parse from \'NoneType\'\\")"]}'
-    )
-
-    assert actual == expected_cloudflare_blocked
+    assert_blocked(actual)

@@ -31,13 +31,22 @@ class LoopBound(Generic[T]):
     :attr:`close_timeout` it stops waiting, and the open closes its resource
     whenever it finishes.
 
+    A resource still open when its loop ends is closed then, on that loop:
+    ``asyncio.run()`` finalizes the loop's async generators before closing it,
+    and one started on each loop the resource is opened on closes it. So a
+    caller who never calls :meth:`close` (e.g. a handler used inside
+    ``asyncio.run()`` without ``async with``) does not leak it, and an
+    ``aiohttp`` session is not reported unclosed at exit. A loop that never
+    ends (Jupyter) keeps it until :meth:`close`.
+
     Closing is best-effort: a resource from a loop that has since closed
-    cannot always be closed cleanly.
+    without that (one not run by ``asyncio.run()``) cannot always be closed
+    cleanly.
 
     Attributes:
         name: What the resource is, for log messages.
-        log_level: The level to log a loop-change replacement at: INFO for
-            a costly one (relaunching a browser), DEBUG for a cheap one.
+        log_level: The level to log reopening on a new loop at: INFO for a
+            costly one (relaunching a browser), DEBUG for a cheap one.
         close_timeout: Seconds :meth:`close` waits for an open in progress,
             so a hung open (a browser that never answers) cannot hang it.
     """
@@ -63,6 +72,13 @@ class LoopBound(Generic[T]):
         # Advanced by close(), so an open it overlapped closes its resource
         # instead of keeping it.
         self._closes = 0
+        # Closes the resource when its loop ends (see _close_at_loop_end).
+        # Held here because the loop only keeps a weak reference to it.
+        self._loop_end_watcher = None
+        self._watched_loop: Optional[asyncio.AbstractEventLoop] = None
+        # Set when a loop's end closed the resource, so the reopen on the
+        # next loop says why it happens.
+        self._closed_at_loop_end = False
 
     @property
     def resource(self) -> Optional[T]:
@@ -134,7 +150,54 @@ class LoopBound(Generic[T]):
         # Stored by the open itself, so it is kept even if every caller was
         # cancelled meanwhile.
         self._resource, self._loop = resource, asyncio.get_running_loop()
+        if self._closed_at_loop_end:
+            self._closed_at_loop_end = False
+            logger.log(self.log_level, "event loop changed; reopened the %s", self.name)
+        await self._watch_loop_end()
         return resource
+
+    async def _watch_loop_end(self):
+        """Close the resource when the running loop ends, if still open then.
+
+        One watcher per loop while it is pending, so reopening on the same
+        loop (after close()) reuses it.
+        """
+        loop = asyncio.get_running_loop()
+        if self._watched_loop is loop:
+            return
+        # A previous loop's watcher, if unfinished, is dropped: asyncio skips
+        # finalizing it once its loop is closed, and otherwise finalizes it on
+        # that loop, where it finds the resource no longer its own.
+        watcher = self._close_at_loop_end(loop)
+        await anext(watcher)  # runs to its yield; the loop now tracks it
+        self._loop_end_watcher, self._watched_loop = watcher, loop
+
+    async def _close_at_loop_end(self, loop: asyncio.AbstractEventLoop):
+        try:
+            yield
+        finally:
+            if self._watched_loop is loop:
+                # Finished: a later open on this loop needs a new watcher, and
+                # the ended loop need not be kept alive.
+                self._loop_end_watcher = self._watched_loop = None
+            # Only a resource opened on this loop: by the time a loop's
+            # watcher is finalized, a later loop may have replaced it.
+            if self._loop is loop:
+                resource, self._resource, self._loop = self._resource, None, None
+                self._closed_at_loop_end = True
+                logger.debug("event loop ending; closing the %s", self.name)
+                try:
+                    # Capped, so a closer that hangs cannot stop the program
+                    # from exiting.
+                    await asyncio.wait_for(
+                        self._close_quietly(resource), self.close_timeout
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "%s still closing after %ss as its event loop ends",
+                        self.name,
+                        self.close_timeout,
+                    )
 
     async def _close_quietly(self, resource: T):
         try:

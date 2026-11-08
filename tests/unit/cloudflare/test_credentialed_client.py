@@ -217,7 +217,8 @@ class TestSession:
     @pytest.mark.unit
     def test_new_event_loop_replaces_the_session(self, response, session):
         """A session belongs to the loop that created it; each asyncio.run()
-        makes a new one, so the old session is closed and a new one opened."""
+        makes a new one, so the old session is closed as its loop ends and a
+        new one opened."""
         client = CredentialedClient()
         first = session(get=response(text="<html>OK</html>"))
         second = session(get=response(text="<html>OK</html>"))
@@ -228,3 +229,17 @@ class TestSession:
 
         first.close.assert_awaited_once()
         assert second.get.call_count == 1
+
+    @pytest.mark.unit
+    def test_an_unclosed_client_closes_its_session_as_the_loop_ends(self):
+        """A client never closed (e.g. a handler used without ``async with``)
+        has its real aiohttp session closed as the loop ends; left open,
+        aiohttp reports "Unclosed client session" at exit."""
+        client = CredentialedClient()
+
+        async def open_session():
+            return await client._sessions.get()
+
+        session = asyncio.run(open_session())
+
+        assert session.closed
