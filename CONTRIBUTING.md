@@ -148,7 +148,10 @@ possible, with a comment saying why:
 
 CI's secret scan reads `.betterleaksignore` from `main`, never from the change
 it scans, so a new fingerprint takes effect once it's on `main`: add it in a
-pull request of its own. Inline `betterleaks:allow` comments are ignored.
+pull request of its own. For a finding in a pull request, use the form without
+the commit, `<path>:<rule>:<line>`: a squash or rebase merge gives the commit a
+new SHA that a `<commit>:...` fingerprint no longer matches. Inline
+`betterleaks:allow` comments are ignored.
 
 ## Pull request titles
 
