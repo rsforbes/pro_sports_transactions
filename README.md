@@ -27,7 +27,7 @@ pip install pro_sports_transactions[nodriver]
 
 The extra doesn't install a browser: you also need **Google Chrome**, and on a headless Linux host a virtual display such as `xvfb`. See the [nodriver guide](https://github.com/rsforbes/pro_sports_transactions/blob/main/docs/nodriver.md#prerequisites) for details, supported browsers, and caveats.
 
-To use the [Unflare](#unflare) service instead, `pip install pro_sports_transactions` is enough. Requires Python 3.11+.
+To use the [Unflare](#unflare) service instead, `pip install pro_sports_transactions` is enough. Requires Python 3.11.5+.
 
 ## Quick Start
 ```python
