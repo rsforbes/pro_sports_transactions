@@ -139,17 +139,26 @@ jobs:
           persist-credentials: false
           fetch-depth: 0 # full history: a secret removed in a later commit is still leaked
 
-      # The version is read from the betterleaks hook's `# frozen:` comment in
-      # .pre-commit-config.yaml rather than written here, so the commit-time
-      # hook and this scan cannot drift onto different versions. Dependabot's
-      # pre-commit ecosystem bumps it there.
+      # The version is read from the betterleaks hook in .pre-commit-config.yaml
+      # rather than written here, so the commit-time hook and this scan cannot
+      # drift onto different versions. The hook pins a commit SHA with its tag
+      # in the `# frozen:` comment; the step checks that the tag still names
+      # that commit, so an edit to one without the other fails here.
+      # Dependabot's pre-commit ecosystem bumps both.
       - name: Resolve the betterleaks version from the pre-commit config
         id: betterleaks
         run: |
-          rev=$(grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
-            | sed -n 's/.*# frozen: \(v[0-9][0-9.]*\)$/\1/p')
-          if [ -z "$rev" ]; then
-            echo "::error::Could not read the betterleaks version from .pre-commit-config.yaml"
+          entry=$(grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
+            | grep '^ *rev: ' || true)
+          sha=$(printf '%s\n' "$entry" | sed -n 's/^ *rev: \([0-9a-f]\{40\}\) # frozen: v[0-9][0-9.]*$/\1/p')
+          rev=$(printf '%s\n' "$entry" | sed -n 's/^ *rev: [0-9a-f]\{40\} # frozen: \(v[0-9][0-9.]*\)$/\1/p')
+          if [ "$(printf '%s\n' "$entry" | wc -l)" -ne 1 ] || [ -z "$sha" ] || [ -z "$rev" ]; then
+            echo "::error::Expected one betterleaks hook pinned as 'rev: <sha> # frozen: vX.Y.Z' in .pre-commit-config.yaml"
+            exit 1
+          fi
+          tagged=$(git ls-remote https://github.com/betterleaks/betterleaks "refs/tags/$rev" "refs/tags/$rev^{}" | cut -f1)
+          if ! printf '%s\n' "$tagged" | grep -qx "$sha"; then
+            echo "::error::betterleaks $rev does not name commit $sha, the rev in .pre-commit-config.yaml"
             exit 1
           fi
           echo "Scanning with betterleaks $rev"
