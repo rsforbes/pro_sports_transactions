@@ -146,6 +146,10 @@ possible, with a comment saying why:
 | zizmor      | a `# zizmor: ignore[<audit>]` comment on the flagged line                            |
 | Trivy       | add the vulnerability ID to a `.trivyignore` file (prefer upgrading the package)     |
 
+CI's secret scan reads `.betterleaksignore` from `main`, never from the change
+it scans, so a new fingerprint takes effect once it's on `main`: add it in a
+pull request of its own. Inline `betterleaks:allow` comments are ignored.
+
 ## Pull request titles
 
 This repository **squash-merges** pull requests, so the **PR title becomes the
