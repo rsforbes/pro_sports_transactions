@@ -1,0 +1,89 @@
+# Integration — run the live integration and performance suites weekly.
+#
+# CI runs only the unit tests (pyproject.toml's testpaths), so nothing else
+# exercised the suites that hit the live site: they drifted unnoticed (a module
+# that no longer collected, assertions pinned to a reworded error, a search
+# URL that returned "No Transaction Type boxes were checked."). This workflow
+# runs them on a schedule so that drift, and changes on the site or in
+# Cloudflare, show up within a week.
+#
+# It never runs on pull requests and never gates a merge: a live site behind
+# Cloudflare can't make a reliable required check. Expect occasional failures:
+# runner IPs may be challenged differently from a developer's, and a Turnstile
+# solve doesn't pass every time. Rerun before investigating.
+#
+# What runs here:
+# - nodriver: Google Chrome ships on ubuntu-latest (the test finds it as
+#   `google-chrome`); xvfb is installed explicitly because runner-image
+#   contents change, and the test needs a display.
+# - Direct and Search: the direct requests that Cloudflare is expected to block.
+# - Unflare: skipped. There is no Unflare service here (locally it runs on the
+#   host, outside the dev container); the tests skip themselves when it can't
+#   be reached.
+#
+# If a scheduled run fails, `report-failure` opens an issue (or comments on the
+# open one), mirroring security.yml.
+
+name: Integration
+
+on:
+  schedule:
+    - cron: '0 14 * * 1' # Mondays 14:00 UTC (an hour after security.yml)
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  integration:
+    name: Integration tests (live site)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: uv sync --frozen --extra nodriver
+      # Skips apt (and its mirrors) when the runner image already has xvfb.
+      - name: Install xvfb
+        run: |
+          command -v xvfb-run || {
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
+          }
+      - name: Show browser version
+        run: google-chrome --version
+      # Paths, not a marker filter: a new test missing its marker still runs.
+      - name: Test
+        run: xvfb-run -a uv run pytest tests/integration tests/performance -rs -v
+
+  report-failure:
+    name: Report failure
+    needs: [integration]
+    # Manual runs have someone watching; scheduled runs may not.
+    if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          title="Integration tests failing on main"
+          body="The \`Integration\` workflow failed on a ${EVENT} run: ${RUN_URL}
+
+          A single failure is often a flaky Cloudflare solve or a third-party test endpoint (httpbin.org) being down: check which test failed, and rerun the workflow before investigating. If it keeps failing, likely causes are a change on prosportstransactions.com or in Cloudflare's challenge (including a runner no longer being blocked, which the direct-request tests expect), or nodriver needing a bump (see docs/nodriver.md). Close this issue once the workflow passes again."
+          existing=$(gh issue list --state open --search "\"${title}\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
