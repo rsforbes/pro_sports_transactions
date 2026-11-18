@@ -1,6 +1,7 @@
 """Unit tests for LoopBound."""
 
 import asyncio
+import gc
 import logging
 
 import pytest
@@ -50,6 +51,17 @@ class Factory:
         return LoopBound(slow_open, self.close, lambda r: not r.closed)
 
 
+def run_unfinalized(coro):
+    """Run ``coro`` on a new loop that closes without finalizing its async
+    generators, unlike ``asyncio.run()``. Its resource then outlives it, so a
+    later loop takes the loop-change path."""
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
 class TestLoopBound:
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -67,14 +79,14 @@ class TestLoopBound:
 
     @pytest.mark.unit
     def test_new_event_loop_closes_and_replaces_the_resource(self, caplog):
-        """Each asyncio.run() makes a new loop and closes it on exit, so a
-        resource from an earlier loop is closed and a new one opened."""
+        """A resource still held from an earlier loop (one that ended without
+        closing it) is closed and a new one opened."""
         factory = Factory()
         bound = factory.bound()
 
-        first = asyncio.run(bound.get())
+        first = run_unfinalized(bound.get())
         with caplog.at_level(logging.DEBUG):
-            second = asyncio.run(bound.get())
+            second = run_unfinalized(bound.get())
 
         assert second is not first
         assert factory.closed == [1]
@@ -83,6 +95,122 @@ class TestLoopBound:
             for r in caplog.records
             if "event loop changed; replacing the resource" in r.getMessage()
         ] == [logging.DEBUG]
+
+    @pytest.mark.unit
+    def test_loop_end_closes_a_resource_never_closed(self, caplog):
+        """asyncio.run() finalizes its loop's async generators before closing
+        it, so a resource the caller never closed is closed on its own loop,
+        and the next loop opens a new one, saying why."""
+        factory = Factory()
+        bound = factory.bound()
+
+        with caplog.at_level(logging.DEBUG):
+            first = asyncio.run(bound.get())
+
+            assert first.closed
+            assert bound.resource is None
+            assert "event loop ending; closing the resource" in caplog.text
+
+            second = asyncio.run(bound.get())
+
+        assert second.number == 2
+        assert factory.closed == [1, 2]
+        assert "event loop changed; reopened the resource" in caplog.text
+        assert "replacing" not in caplog.text  # closed already, not replaced
+
+    @pytest.mark.unit
+    def test_loop_end_stops_waiting_for_a_hung_close(self, caplog):
+        """A closer that never returns must not stop asyncio.run() returning."""
+        factory = Factory()
+        factory.hold_close = asyncio.Event()  # never set: the close hangs
+        bound = factory.bound()
+        bound.close_timeout = 0.01
+
+        with caplog.at_level(logging.WARNING):
+            asyncio.run(bound.get())
+
+        assert factory.closed == [1]  # attempted
+        assert bound.resource is None
+        assert "resource still closing after 0.01s" in caplog.text
+
+    @pytest.mark.unit
+    def test_a_reopen_after_loop_shutdown_is_watched_again(self):
+        """A loop whose async generators were finalized, then used again,
+        closes the resource reopened on it at its next shutdown."""
+        factory = Factory()
+        bound = factory.bound()
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(bound.get())
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            assert factory.closed == [1]
+
+            with pytest.warns(ResourceWarning, match="after loop.shutdown_asyncgens"):
+                # asyncio warns about any generator started after shutdown
+                reopened = loop.run_until_complete(bound.get())
+            loop._asyncgens_shutdown_called = False  # allow a second shutdown
+            loop.run_until_complete(loop.shutdown_asyncgens())
+
+            assert reopened.closed
+            assert factory.closed == [1, 2]
+        finally:
+            loop.close()
+
+    @pytest.mark.unit
+    def test_loop_end_does_not_close_again_after_close(self):
+        factory = Factory()
+        bound = factory.bound()
+
+        async def get_then_close():
+            await bound.get()
+            await bound.close()
+
+        asyncio.run(get_then_close())
+
+        assert factory.closed == [1]
+
+    @pytest.mark.unit
+    def test_loop_end_closes_a_resource_reopened_on_the_same_loop(self):
+        factory = Factory()
+        bound = factory.bound()
+
+        async def get_close_get():
+            await bound.get()
+            await bound.close()
+            return await bound.get()
+
+        reopened = asyncio.run(get_close_get())
+
+        assert reopened.closed
+        assert factory.closed == [1, 2]
+
+    @pytest.mark.unit
+    def test_an_earlier_loop_ending_leaves_a_later_loops_resource(self):
+        """A loop that ends after its resource was replaced on another loop
+        must not close the replacement. The first loop's watcher is finalized
+        either by that loop's shutdown or, once dropped, by garbage collection;
+        either way it must find the resource no longer its own."""
+        factory = Factory()
+        bound = factory.bound()
+        first_loop, second_loop = asyncio.new_event_loop(), asyncio.new_event_loop()
+        try:
+            first_loop.run_until_complete(bound.get())
+            second = second_loop.run_until_complete(bound.get())
+            assert factory.closed == [1]  # replaced on the loop change
+
+            gc.collect()  # the same on interpreters without refcounting
+            first_loop.run_until_complete(first_loop.shutdown_asyncgens())
+
+            assert bound.resource is second
+            assert not second.closed
+
+            second_loop.run_until_complete(second_loop.shutdown_asyncgens())
+
+            assert second.closed
+            assert factory.closed == [1, 2]
+        finally:
+            first_loop.close()
+            second_loop.close()
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -129,7 +257,7 @@ class TestLoopBound:
         leave get() returning a closed resource."""
         factory = Factory()
         bound = factory.bound()
-        asyncio.run(bound.get())
+        run_unfinalized(bound.get())
 
         async def close_during_swap():
             factory.hold_close = asyncio.Event()
@@ -139,7 +267,7 @@ class TestLoopBound:
             factory.hold_close.set()
             return await getting
 
-        resource = asyncio.run(close_during_swap())
+        resource = run_unfinalized(close_during_swap())
 
         assert not resource.closed
         assert bound.resource is resource
@@ -148,7 +276,7 @@ class TestLoopBound:
     def test_concurrent_gets_during_a_loop_change_share_one_resource(self):
         factory = Factory()
         bound = factory.bound()
-        asyncio.run(bound.get())
+        run_unfinalized(bound.get())
 
         async def get_twice_during_swap():
             factory.hold_close = asyncio.Event()
@@ -158,7 +286,7 @@ class TestLoopBound:
             factory.hold_close.set()
             return await first, second
 
-        first, second = asyncio.run(get_twice_during_swap())
+        first, second = run_unfinalized(get_twice_during_swap())
 
         assert first is second
         assert len(factory.opened) == 2

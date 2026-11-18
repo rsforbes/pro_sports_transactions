@@ -52,9 +52,9 @@ updates:
       actions:
         patterns: ["*"]
 
-  # Hooks in .pre-commit-config.yaml (Betterleaks, Semgrep). When the
-  # betterleaks rev moves, bump BETTERLEAKS_VERSION/BETTERLEAKS_SHA256 in
-  # .github/workflows/ci.yml to match (the `betterleaks` job fails until then).
+  # Hooks in .pre-commit-config.yaml (Betterleaks, Semgrep). CI's betterleaks
+  # job reads its version from the hook's `# frozen:` comment, so a bump here
+  # needs no other edit.
   - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:
