@@ -4,7 +4,7 @@ version = "1.1.2"
 description = "A Python Library for Consuming Transactions from Pro Sports Transactions (https://www.prosportstransactions.com)"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11.5"
+requires-python = ">=3.11"
 authors = [{ name = "Randy Forbes", email = "randy.forbes@gmail.com" }]
 maintainers = [{ name = "Randy Forbes", email = "randy.forbes@gmail.com" }]
 keywords = [
@@ -54,7 +54,7 @@ dependencies = [
   # Ceiling raised to <4 for pandas 3.x: read_html no longer accepts a literal
   # HTML string, so search.py wraps its input in StringIO (compatible with 2.2.x).
   "pandas>=2.2.2,<4",
-  "brotli>=1.2.0,<2",
+  "brotli>=1.2.1,<2",
   "lxml>=4.9.2,<7.0.0",
   "html5lib>=1.1,<2",
   "bs4>=0.0.1,<0.0.3",
@@ -89,6 +89,13 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+# The lock resolves for Python 3.11.5 and later only. soupsieve 3.0.2 and
+# later require it, and without this limit uv keeps soupsieve 2.9 (CVE-2026-
+# 126190, -126191) in the lock for 3.11.0-3.11.4. This narrows the lock, the
+# environment development and CI use, not the published requires-python.
+environments = ["python_full_version >= '3.11.5'"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pro_sports_transactions"]
