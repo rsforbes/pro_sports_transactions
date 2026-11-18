@@ -1115,6 +1115,7 @@ dependencies = [
     { name = "html5lib" },
     { name = "lxml" },
     { name = "pandas" },
+    { name = "soupsieve" },
 ]
 
 [package.optional-dependencies]
@@ -1135,13 +1136,14 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.14.3,<4" },
-    { name = "brotli", specifier = ">=1.2.0,<2" },
+    { name = "brotli", specifier = ">=1.2.1,<2" },
     { name = "bs4", specifier = ">=0.0.1,<0.0.3" },
     { name = "html5lib", specifier = ">=1.1,<2" },
     { name = "lxml", specifier = ">=4.9.2,<7.0.0" },
     { name = "nodriver", marker = "extra == 'nodriver'", specifier = ">=0.50,<1" },
     { name = "opencv-python-headless", marker = "extra == 'nodriver'", specifier = ">=4.9,<6" },
     { name = "pandas", specifier = ">=2.2.2,<4" },
+    { name = "soupsieve", specifier = ">=4.1" },
 ]
 provides-extras = ["nodriver"]
 

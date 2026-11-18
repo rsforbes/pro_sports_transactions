@@ -1,10 +1,12 @@
 # CI — lint once, run the test suite across every supported Python version, and
 # guard the declared dependency floor.
 #
-# The published package supports Python >=3.11, so the `test` matrix runs the
-# suite on each currently-supported CPython (3.11–3.14) to guarantee that
-# support contract. When the floor moves (e.g. 3.11 reaches EOL), drop that leg
-# and bump the Python floor + classifiers in pyproject.toml.
+# The published package supports Python >=3.11.5, so the `test` matrix runs
+# the suite on each currently-supported CPython (3.11–3.14; the 3.11 leg gets
+# the newest 3.11 patch) to guarantee that support contract, and
+# `lowest-direct` runs on 3.11.5 itself, the declared floor. When the floor
+# moves (e.g. 3.11 reaches EOL), drop that leg and bump the Python floor +
+# classifiers in pyproject.toml.
 #
 # `lowest-direct` installs the *lowest* versions allowed by our direct
 # dependency constraints (uv --resolution lowest-direct) and runs the suite, so
@@ -88,7 +90,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          python-version: '3.11'
+          python-version: '3.11.5'
       - name: Install lowest allowed direct dependencies
         run: uv sync --resolution lowest-direct
       - name: Test
