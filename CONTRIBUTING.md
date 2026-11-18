@@ -48,6 +48,11 @@ uv run --with pytest-cov pytest --cov=src/pro_sports_transactions
 - **Integration Tests**: Tests requiring external services (may be skipped if services unavailable)
 - **Performance Tests**: Benchmarks with configurable thresholds from `pyproject.toml`
 
+CI runs only the unit tests. The integration and performance tests run weekly
+against the live site ([Integration](.github/workflows/integration.yml)
+workflow, also runnable by hand), and a failing scheduled run opens an
+"Integration tests failing on main" issue.
+
 ### Performance Testing
 
 The library includes built-in performance testing capabilities with configurable thresholds:
