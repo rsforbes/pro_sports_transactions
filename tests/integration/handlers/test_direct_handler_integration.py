@@ -21,7 +21,8 @@ class TestDirectRequestHandlerIntegration:
         handler = DirectRequestHandler()
         url = (
             "https://www.prosportstransactions.com/basketball/Search/"
-            "SearchResults.php?BeginDate=2023-01-01&EndDate=2023-01-02&Submit=Search"
+            "SearchResults.php?BeginDate=2023-01-01&EndDate=2023-01-31&Submit=Search"
+            "&PlayerMovementChkBx=yes"
         )
 
         # This should return None due to Cloudflare JA4 protection
@@ -29,7 +30,8 @@ class TestDirectRequestHandlerIntegration:
 
         # Expected: Cloudflare blocks the request, returns None or error response
         # This confirms why we need UnflareRequestHandler
-        assert result is None or "Cloudflare" in result or "403" in str(result)
+        # (the handler returns None for any non-200 response)
+        assert result is None
 
     @pytest.mark.integration
     @pytest.mark.asyncio

@@ -4,7 +4,7 @@ version = "1.1.2"
 description = "A Python Library for Consuming Transactions from Pro Sports Transactions (https://www.prosportstransactions.com)"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.11.5"
 authors = [{ name = "Randy Forbes", email = "randy.forbes@gmail.com" }]
 maintainers = [{ name = "Randy Forbes", email = "randy.forbes@gmail.com" }]
 keywords = [
@@ -54,10 +54,17 @@ dependencies = [
   # Ceiling raised to <4 for pandas 3.x: read_html no longer accepts a literal
   # HTML string, so search.py wraps its input in StringIO (compatible with 2.2.x).
   "pandas>=2.2.2,<4",
-  "brotli>=1.2.0,<2",
+  # Floors for CVE fixes, so a plain `pip install` gets them too: brotli 1.2.1
+  # fixes CVE-2026-111497; soupsieve, which bs4 brings in with no minimum, fixes
+  # CVE-2026-126190 and CVE-2026-126191 from 4.0. soupsieve 3.0.2 and later need
+  # Python 3.11.5, which is why requires-python is >=3.11.5. Nothing here
+  # imports soupsieve, so it has a floor and no ceiling; drop the entry once
+  # beautifulsoup4 requires soupsieve >=4.0 itself.
+  "brotli>=1.2.1,<2",
   "lxml>=4.9.2,<7.0.0",
   "html5lib>=1.1,<2",
   "bs4>=0.0.1,<0.0.3",
+  "soupsieve>=4.1",
 ]
 
 [project.optional-dependencies]
