@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.11'
       - name: Install dependencies
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -86,7 +86,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.11'
       - name: Install lowest allowed direct dependencies
@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.11'
       # Only the dev group (pre-commit itself): the hooks run in their own
@@ -133,33 +133,186 @@ jobs:
   betterleaks:
     name: Secrets (Betterleaks)
     runs-on: ubuntu-latest
-    env:
-      # Keep in step with the betterleaks rev in .pre-commit-config.yaml (the
-      # first step fails the job when they differ, e.g. after a Dependabot hook
-      # bump). To bump: update both, and take the linux_x64 sha256 from the
-      # release's checksums.txt.
-      BETTERLEAKS_VERSION: 1.9.0
-      BETTERLEAKS_SHA256: f8b185a39ffcece2a1ca82bf3a4e7435cd81963ffd16b7a9128daf75f35f6de7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0 # full history: a secret removed in a later commit is still leaked
-      - name: Check version matches the pre-commit hook
+
+      # The version is read from the betterleaks hook in .pre-commit-config.yaml
+      # rather than written here, so the commit-time hook and this scan cannot
+      # drift onto different versions. The hook pins a commit SHA with its tag
+      # in the `# frozen:` comment; the step checks that the tag still names
+      # that commit, so an edit to one without the other fails here.
+      # Dependabot's pre-commit ecosystem bumps both.
+      - name: Resolve the betterleaks version from the pre-commit config
+        id: betterleaks
         run: |
-          if ! grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
-              | grep -q "# frozen: v${BETTERLEAKS_VERSION}\$"; then
-            echo "::error::BETTERLEAKS_VERSION (${BETTERLEAKS_VERSION}) does not match the betterleaks rev in .pre-commit-config.yaml; bump BETTERLEAKS_VERSION and BETTERLEAKS_SHA256"
+          entry=$(grep -A1 'repo: https://github.com/betterleaks/betterleaks$' .pre-commit-config.yaml \
+            | grep '^ *rev: ' || true)
+          sha=$(printf '%s\n' "$entry" | sed -n 's/^ *rev: \([0-9a-f]\{40\}\) # frozen: v[0-9][0-9.]*$/\1/p')
+          rev=$(printf '%s\n' "$entry" | sed -n 's/^ *rev: [0-9a-f]\{40\} # frozen: \(v[0-9][0-9.]*\)$/\1/p')
+          if [ "$(printf '%s\n' "$entry" | wc -l)" -ne 1 ] || [ -z "$sha" ] || [ -z "$rev" ]; then
+            echo "::error::Expected one betterleaks hook pinned as 'rev: <sha> # frozen: vX.Y.Z' in .pre-commit-config.yaml"
             exit 1
           fi
-      - name: Install Betterleaks
+          tagged=$(git ls-remote https://github.com/betterleaks/betterleaks "refs/tags/$rev" "refs/tags/$rev^{}" | cut -f1)
+          if ! printf '%s\n' "$tagged" | grep -qx "$sha"; then
+            echo "::error::betterleaks $rev does not name commit $sha, the rev in .pre-commit-config.yaml"
+            exit 1
+          fi
+          echo "Scanning with betterleaks $rev"
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+
+      # Installed from the published release binary rather than run as a
+      # container image. Three reasons, in order of weight:
+      #
+      # The archive is verified by signature, so what executes is the binary
+      # betterleaks' own release workflow built for this tag, and nothing else.
+      # This is the one piece of third-party code that reads the entire tree
+      # and full history. betterleaks publishes immutable releases (assets
+      # and tag cannot change after publishing) and signs checksums.txt with
+      # Sigstore from .github/workflows/release.yml. Checking that signature
+      # against the exact tag's workflow identity rejects a checksums.txt that
+      # anyone else produced — a stolen upload token included — and the
+      # archive is then checked against the signed checksums. This needs no
+      # hand edit per release, so a Dependabot bump of the pre-commit rev
+      # passes on its own and no person reviews the new binary, which is
+      # accepted on purpose. Two things guard it: the Dependabot cooldown on
+      # the pre-commit ecosystem (a bad release usually surfaces within the
+      # window) and this signature (only betterleaks' release workflow can
+      # produce one).
+      #
+      # `gh release verify-asset` was considered: it needs no extra tool, but
+      # GitHub's release attestation only proves the file was published in a
+      # betterleaks release, which a stolen token can also do. The Sigstore
+      # identity proves which workflow built it.
+      #
+      # cosign fetches Sigstore's trusted root online, so a Sigstore outage
+      # fails this job. That is the right way to fail for a security gate; a
+      # re-run once Sigstore recovers clears it.
+      #
+      # It is the same delivery the pre-commit hook uses (a Go binary), so the
+      # commit-time scan and this one are one mechanism rather than two.
+      #
+      # And the scan itself runs anywhere the binary does. The dev container
+      # has no cosign, so to reproduce a CI result there, install the same
+      # release and run the Scan step's command; verification is CI's job.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Install betterleaks
+        env:
+          REV: ${{ steps.betterleaks.outputs.rev }}
         run: |
-          tarball="betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSLO "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/${tarball}"
-          echo "${BETTERLEAKS_SHA256}  ${tarball}" | sha256sum -c -
-          tar -xzf "$tarball" betterleaks
+          ver="${REV#v}"
+          archive="betterleaks_${ver}_linux_x64.tar.gz"
+          base="https://github.com/betterleaks/betterleaks/releases/download/${REV}"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o "$archive" "$base/$archive"
+          curl -fsSL -o checksums.txt "$base/checksums.txt"
+          curl -fsSL -o checksums.txt.sigstore.json "$base/checksums.txt.sigstore.json"
+          # The identity is the release workflow at this exact tag, not any
+          # tag: a signature from another release cannot vouch for this one.
+          cosign verify-blob checksums.txt \
+            --bundle checksums.txt.sigstore.json \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "https://github.com/betterleaks/betterleaks/.github/workflows/release.yml@refs/tags/${REV}"
+          # Exactly one line naming this archive (an exact field match, not a
+          # pattern), or the job stops; then sha256sum -c fails it on a hash
+          # mismatch.
+          awk -v a="$archive" '$2 == a' checksums.txt > archive.sha256
+          if [ "$(wc -l < archive.sha256)" -ne 1 ]; then
+            echo "::error::Expected exactly one checksum for $archive in checksums.txt"
+            exit 1
+          fi
+          sha256sum -c archive.sha256
+          tar xzf "$archive" betterleaks
+          ./betterleaks version
+
+      # Suppressions are read from main, never from the code under scan, so a
+      # change cannot quietly suppress its own finding: a new allowlist entry or
+      # ignored fingerprint reaches main in a pull request of its own first.
+      # (A change to this workflow or to the scanner's version can still alter
+      # the scan; that is a security change, reviewed as one.) That holds for
+      # every run of this job, whatever triggered it, stacked pull requests
+      # included. The checkout's own files are replaced with
+      # main's before the scan, because betterleaks reads an ignore file from
+      # the scan target whatever -i names (.betterleaksignore, or failing that
+      # .gitleaksignore), and loads a .betterleaks.toml from it when given no
+      # --config before 1.10.0. Where main lacks a file, the scan uses the
+      # default rules alone, or ignores nothing. The scan also ignores inline
+      # betterleaks:allow comments (--ignore-gitleaks-allow below), which a
+      # change could add on any line.
+      - name: Replace the suppression files with main's
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The checkout's own files are still scanned for secrets, as plain
+          # content: copied aside under names betterleaks doesn't treat as
+          # policy, and checked with main's config at the end of this step.
+          submitted="$RUNNER_TEMP/submitted"
+          mkdir -p "$submitted"
+          for f in .betterleaks.toml .betterleaksignore .gitleaksignore; do
+            if [ -f "$f" ]; then cp "$f" "$submitted/${f#.}.txt"; fi
+          done
+          rm -f .betterleaks.toml .betterleaksignore .gitleaksignore
+          # .gitleaksignore is read only where main has no .betterleaksignore,
+          # as betterleaks itself reads it.
+          for f in .betterleaks.toml .betterleaksignore .gitleaksignore; do
+            if [ "$f" = .gitleaksignore ] && [ -f .betterleaksignore ]; then continue; fi
+            # The contents API reads the default branch when given no ref. A
+            # failed or cut-short download, after the retries, reports as 000.
+            status=$(curl -sSL --retry 3 --retry-all-errors -o "$f" -w '%{http_code}' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github.raw' \
+              "$GITHUB_API_URL/repos/$REPO/contents/$f") || status=000
+            case "$status" in
+              200) echo "Using main's $f" ;;
+              404) rm -f "$f" ;;
+              *) echo "::error::Could not read $f from main (HTTP $status)"; exit 1 ;;
+            esac
+          done
+          if [ ! -f .betterleaks.toml ]; then
+            printf '[extend]\nuseDefault = true\n' > .betterleaks.toml
+            echo "main has no .betterleaks.toml; using the default rules alone"
+          elif python3 -c 'import sys, tomllib; sys.exit(0 if tomllib.load(open(".betterleaks.toml", "rb")).get("extend", {}).get("path") else 1)'; then
+            # An extended file would be read from the checkout, not from main.
+            echo "::error::main's .betterleaks.toml uses [extend] path, which this step can't take from main"
+            exit 1
+          fi
+          # The config must still find a secret: one without the default rules,
+          # or with a filter that drops everything, would pass every run. The
+          # planted value is random, so no secret-shaped literal sits here.
+          # --exit-code 3 tells a finding apart from a config that fails to
+          # load, which exits 1.
+          canary="$RUNNER_TEMP/canary"
+          mkdir -p "$canary"
+          printf 'db_password = "%s"\n' "$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)" \
+            > "$canary/canary.py"
+          rc=0
+          "$RUNNER_TEMP/betterleaks" dir "$canary" --config .betterleaks.toml --exit-code 3 \
+            --no-banner > /dev/null 2>&1 || rc=$?
+          case "$rc" in
+            3) ;;
+            0) echo "::error::main's .betterleaks.toml lets a planted secret through, so the scan would pass anything"; exit 1 ;;
+            *) echo "::error::main's .betterleaks.toml could not be used (betterleaks exit $rc)"; exit 1 ;;
+          esac
+          rc=0
+          "$RUNNER_TEMP/betterleaks" dir "$submitted" --config .betterleaks.toml --exit-code 3 \
+            --ignore-gitleaks-allow --redact --verbose --no-banner || rc=$?
+          case "$rc" in
+            0) ;;
+            3) echo "::error::A suppression file in the checkout holds what looks like a secret"; exit 1 ;;
+            *) echo "::error::Could not scan the checkout's suppression files (betterleaks exit $rc)"; exit 1 ;;
+          esac
+
       - name: Scan git history
-        run: ./betterleaks git --redact --verbose --no-banner .
+        # The suppression files are main's by now (above).
+        run: |
+          "$RUNNER_TEMP/betterleaks" git --config .betterleaks.toml \
+            --ignore-gitleaks-allow --redact --verbose --no-banner .
 
   trivy:
     name: Vulnerabilities (Trivy)
