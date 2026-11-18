@@ -230,9 +230,89 @@ jobs:
           tar xzf "$archive" betterleaks
           ./betterleaks version
 
-      - name: Scan git history
+      # Suppressions are read from main, never from the code under scan, so a
+      # change cannot quietly suppress its own finding: a new allowlist entry or
+      # ignored fingerprint reaches main in a pull request of its own first.
+      # (A change to this workflow or to the scanner's version can still alter
+      # the scan; that is a security change, reviewed as one.) That holds for
+      # every run of this job, whatever triggered it, stacked pull requests
+      # included. The checkout's own files are replaced with
+      # main's before the scan, because betterleaks reads an ignore file from
+      # the scan target whatever -i names (.betterleaksignore, or failing that
+      # .gitleaksignore), and loads a .betterleaks.toml from it when given no
+      # --config before 1.10.0. Where main lacks a file, the scan uses the
+      # default rules alone, or ignores nothing. The scan also ignores inline
+      # betterleaks:allow comments (--ignore-gitleaks-allow below), which a
+      # change could add on any line.
+      - name: Replace the suppression files with main's
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          "$RUNNER_TEMP/betterleaks" git --redact --verbose --no-banner .
+          # The checkout's own files are still scanned for secrets, as plain
+          # content: copied aside under names betterleaks doesn't treat as
+          # policy, and checked with main's config at the end of this step.
+          submitted="$RUNNER_TEMP/submitted"
+          mkdir -p "$submitted"
+          for f in .betterleaks.toml .betterleaksignore .gitleaksignore; do
+            if [ -f "$f" ]; then cp "$f" "$submitted/${f#.}.txt"; fi
+          done
+          rm -f .betterleaks.toml .betterleaksignore .gitleaksignore
+          # .gitleaksignore is read only where main has no .betterleaksignore,
+          # as betterleaks itself reads it.
+          for f in .betterleaks.toml .betterleaksignore .gitleaksignore; do
+            if [ "$f" = .gitleaksignore ] && [ -f .betterleaksignore ]; then continue; fi
+            # The contents API reads the default branch when given no ref. A
+            # failed or cut-short download, after the retries, reports as 000.
+            status=$(curl -sSL --retry 3 --retry-all-errors -o "$f" -w '%{http_code}' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github.raw' \
+              "$GITHUB_API_URL/repos/$REPO/contents/$f") || status=000
+            case "$status" in
+              200) echo "Using main's $f" ;;
+              404) rm -f "$f" ;;
+              *) echo "::error::Could not read $f from main (HTTP $status)"; exit 1 ;;
+            esac
+          done
+          if [ ! -f .betterleaks.toml ]; then
+            printf '[extend]\nuseDefault = true\n' > .betterleaks.toml
+            echo "main has no .betterleaks.toml; using the default rules alone"
+          elif python3 -c 'import sys, tomllib; sys.exit(0 if tomllib.load(open(".betterleaks.toml", "rb")).get("extend", {}).get("path") else 1)'; then
+            # An extended file would be read from the checkout, not from main.
+            echo "::error::main's .betterleaks.toml uses [extend] path, which this step can't take from main"
+            exit 1
+          fi
+          # The config must still find a secret: one without the default rules,
+          # or with a filter that drops everything, would pass every run. The
+          # planted value is random, so no secret-shaped literal sits here.
+          # --exit-code 3 tells a finding apart from a config that fails to
+          # load, which exits 1.
+          canary="$RUNNER_TEMP/canary"
+          mkdir -p "$canary"
+          printf 'db_password = "%s"\n' "$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)" \
+            > "$canary/canary.py"
+          rc=0
+          "$RUNNER_TEMP/betterleaks" dir "$canary" --config .betterleaks.toml --exit-code 3 \
+            --no-banner > /dev/null 2>&1 || rc=$?
+          case "$rc" in
+            3) ;;
+            0) echo "::error::main's .betterleaks.toml lets a planted secret through, so the scan would pass anything"; exit 1 ;;
+            *) echo "::error::main's .betterleaks.toml could not be used (betterleaks exit $rc)"; exit 1 ;;
+          esac
+          rc=0
+          "$RUNNER_TEMP/betterleaks" dir "$submitted" --config .betterleaks.toml --exit-code 3 \
+            --ignore-gitleaks-allow --redact --verbose --no-banner || rc=$?
+          case "$rc" in
+            0) ;;
+            3) echo "::error::A suppression file in the checkout holds what looks like a secret"; exit 1 ;;
+            *) echo "::error::Could not scan the checkout's suppression files (betterleaks exit $rc)"; exit 1 ;;
+          esac
+
+      - name: Scan git history
+        # The suppression files are main's by now (above).
+        run: |
+          "$RUNNER_TEMP/betterleaks" git --config .betterleaks.toml \
+            --ignore-gitleaks-allow --redact --verbose --no-banner .
 
   trivy:
     name: Vulnerabilities (Trivy)

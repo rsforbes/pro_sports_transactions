@@ -22,12 +22,14 @@ repos:
   # CI additionally scans the full git history. language: golang — pre-commit
   # builds the binary on first use and installs a Go toolchain itself if none
   # is present, so nothing extra is needed locally.
-  # False positives: add the finding's fingerprint to .betterleaksignore, or a
-  # `betterleaks:allow` comment on the line.
+  # False positives: add the finding's fingerprint to .betterleaksignore, in a
+  # pull request of its own (CI reads that file from main). Inline
+  # `betterleaks:allow` comments are ignored, here and in CI.
   - repo: https://github.com/betterleaks/betterleaks
     rev: 81aff7a638638aae3a659845d089043e1d8fe9ac # frozen: v1.9.0
     hooks:
       - id: betterleaks
+        args: [--ignore-gitleaks-allow]
 
   # SAST: scans the staged files with Semgrep Community Edition rulesets from
   # the Semgrep Registry (fetched at run time; no account or token needed).
